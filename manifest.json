@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "DocuCheck",
+  "version": "1.0",
+  "description": "Document Check",
+  "permissions": ["activeTab", "storage"],
+  "host_permissions": [
+    "https://na.crs.hs3c.a2z.com/*",
+    "http://desktop-2bhsad4.ant.amazon.com:4004/search-pdf-url",
+    "https://alexandria-outbound-na.amazon.com/*",
+    "https://*.amazon.com/*",
+    "https://*.a2z.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://na.crs.hs3c.a2z.com/workbench/PA/DocReview/MaverickFlow/Classifier*",
+        "https://na.crs.hs3c.a2z.com/lobby*",
+        "https://na.crs.hs3c.a2z.com/workbench/PA/DocReview/ReadOnly/Classifier*",
+        "https://na.crs.hs3c.a2z.com/home"
+      ],
+      "js": ["content.js"],
+      "css": ["styles.css"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["icon128.png", "pdf.js", "pdf.worker.js"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "icons": {
+    "128": "icon128.png"
+  }
+}
