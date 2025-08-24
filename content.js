@@ -208,13 +208,11 @@ function getMediaHistoryTabElement() {
 class DynamicFieldTableScanner {
   constructor() {
     this.fieldData = new Map();
+    // Only the two attributes you want
     this.targetAttributes = [
-      'ASIN_MODEL_NUMBER', 
-      'ASIN_PART_NUMBER', 
-      'CLIENT_SPECIFIED_AGE',
       'DOC_TYPE',
       'MODEL_NUMBER',
-      'PART_NUMBER'
+      'ASIN_MODEL_NUMBER' // Keep this as fallback for MODEL_NUMBER
     ];
   }
 
@@ -626,6 +624,265 @@ class DynamicFieldTableScanner {
 
   sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+// Simplified Scanner - Only extracts DOC_TYPE and MODEL_NUMBER
+class DynamicFieldTableScanner {
+  constructor() {
+    this.fieldData = new Map();
+    // Only the two attributes you want
+    this.targetAttributes = [
+      'DOC_TYPE',
+      'MODEL_NUMBER',
+      'ASIN_MODEL_NUMBER' // Keep this as fallback for MODEL_NUMBER
+    ];
+  }
+
+  async scanDynamicFieldTable(keyword, maxWaitTime = config.dynamicTableWaitTime) {
+    console.log("DocuCheck: Scanning for attribute table...");
+    this.fieldData.clear();
+
+    const startTime = Date.now();
+    let tableFound = false;
+    let attemptCount = 0;
+
+    while (Date.now() - startTime < maxWaitTime && !tableFound) {
+      attemptCount++;
+      tableFound = this.scanForAttributeTable();
+      
+      if (!tableFound && this.fieldData.size === 0) {
+        await this.sleep(200);
+      } else {
+        tableFound = true;
+      }
+    }
+
+    if (tableFound || this.fieldData.size > 0) {
+      console.log(`DocuCheck: Found ${this.fieldData.size} attributes in table`);
+      
+      const matches = this.findMatchingFields(keyword);
+      const extractedAttributes = this.extractTargetAttributes();
+      
+      return {
+        found: matches.length > 0,
+        matches: matches,
+        fieldData: this.fieldData,
+        extractedAttributes: extractedAttributes
+      };
+    } else {
+      console.log("DocuCheck: No attribute table found");
+      return {
+        found: false,
+        matches: [],
+        fieldData: this.fieldData,
+        extractedAttributes: {}
+      };
+    }
+  }
+
+  scanForAttributeTable() {
+    try {
+      let foundAny = false;
+      const tables = document.querySelectorAll('table');
+      
+      for (let tableIndex = 0; tableIndex < tables.length; tableIndex++) {
+        const table = tables[tableIndex];
+        const headerRow = table.querySelector('tr');
+        
+        if (headerRow) {
+          const headers = Array.from(headerRow.querySelectorAll('th, td')).map(cell => cell.textContent.trim());
+          
+          // Check if this matches our expected structure
+          if (headers.length >= 4 && 
+              (headers.includes('Attribute') && headers.includes('Answer')) ||
+              (headers.includes('Question') && headers.includes('Confidence'))) {
+            
+            const rows = table.querySelectorAll('tbody tr');
+            
+            rows.forEach((row, rowIndex) => {
+              const cells = row.querySelectorAll('td');
+              
+              if (cells.length >= 3) {
+                const cell1 = cells[1] ? cells[1].textContent.trim() : '';
+                const cell2 = cells[2] ? cells[2].textContent.trim() : '';
+                const cell3 = cells[3] ? cells[3].textContent.trim() : '';
+                
+                if (cell1 && cell1 !== 'Question' && cell1 !== '') {
+                  const attribute = cell1;
+                  const answer = cell2;
+                  const confidence = cell3;
+                  
+                  this.fieldData.set(attribute, {
+                    value: answer,
+                    confidence: confidence,
+                    attribute: attribute
+                  });
+                  
+                  foundAny = true;
+                }
+              }
+            });
+          }
+        }
+      }
+      
+      return foundAny;
+    } catch (error) {
+      console.log("DocuCheck: Error scanning attribute table:", error);
+      return false;
+    }
+  }
+
+  extractTargetAttributes() {
+    const extracted = {};
+    
+    for (const targetAttr of this.targetAttributes) {
+      // First try exact match
+      if (this.fieldData.has(targetAttr)) {
+        const fieldData = this.fieldData.get(targetAttr);
+        extracted[targetAttr] = {
+          attribute: fieldData.attribute,
+          value: fieldData.value,
+          confidence: fieldData.confidence,
+          matchedField: targetAttr
+        };
+      } else {
+        // Try partial match
+        const lowerTarget = targetAttr.toLowerCase();
+        
+        for (const [fieldName, fieldData] of this.fieldData) {
+          const lowerFieldName = fieldName.toLowerCase();
+          
+          if (lowerFieldName.includes(lowerTarget) || lowerTarget.includes(lowerFieldName)) {
+            extracted[targetAttr] = {
+              attribute: fieldData.attribute,
+              value: fieldData.value,
+              confidence: fieldData.confidence,
+              matchedField: fieldName
+            };
+            break;
+          }
+        }
+      }
+    }
+    
+    return extracted;
+  }
+
+  findMatchingFields(keyword) {
+    const matches = [];
+    if (!keyword) return matches;
+    
+    const keywordLower = keyword.toLowerCase();
+
+    for (const [fieldName, fieldData] of this.fieldData) {
+      if (fieldData.value.toLowerCase().includes(keywordLower)) {
+        matches.push({
+          fieldName: fieldData.attribute,
+          fieldValue: fieldData.value,
+          confidence: fieldData.confidence,
+          matchType: 'value'
+        });
+      }
+      if (fieldName.toLowerCase().includes(keywordLower)) {
+        matches.push({
+          fieldName: fieldData.attribute,
+          fieldValue: fieldData.value,
+          confidence: fieldData.confidence,
+          matchType: 'name'
+        });
+      }
+    }
+
+    return matches;
+  }
+
+  sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+}
+
+// Updated processDocument method - only shows DOC_TYPE and MODEL_NUMBER
+async function processDocumentSimplified(document) {
+  try {
+    document.checkbox.scrollIntoView({ behavior: "smooth", block: "center" });
+    await this.sleep(config.domSettleDelay);
+
+    const rowElement = document.checkbox.closest("tr");
+    if (rowElement) {
+      rowElement.classList.add("flash-highlight");
+    }
+
+    console.log(`DocuCheck: Processing row ${document.rowIndex} - ${document.artifactName}`);
+    
+    const checkboxSuccess = await this.clickCheckboxRobust(document.checkbox);
+    if (!checkboxSuccess) {
+      if (rowElement) rowElement.classList.remove("flash-highlight");
+      return { processed: false, found: false };
+    }
+
+    const isSelected = await this.validateCheckboxSelected(document.checkbox);
+    if (!isSelected) {
+      if (rowElement) rowElement.classList.remove("flash-highlight");
+      return { processed: false, found: false };
+    }
+
+    if (this.ui?.resultMessage) {
+      this.ui.resultMessage.textContent = `🔍 Extracting attributes...`;
+    }
+
+    // Search the dynamic field table
+    const searchResult = await this.catalog.dynamicFieldScanner.scanDynamicFieldTable(this.modelNumber);
+
+    if (rowElement) {
+      setTimeout(() => {
+        rowElement.classList.remove("flash-highlight");
+      }, 300);
+    }
+
+    // Update UI based on search results
+    if (searchResult.found) {
+      const message = `✅ Found "${this.modelNumber}" in document`;
+      console.log(message);
+      if (this.ui?.resultMessage) this.ui.resultMessage.textContent = message;
+    } else {
+      const message = `❌ "${this.modelNumber}" not found`;
+      console.log(message);
+      if (this.ui?.resultMessage) this.ui.resultMessage.textContent = message;
+    }
+
+    // Simplified extraction logging - only show DOC_TYPE and MODEL_NUMBER
+    const extracted = searchResult.extractedAttributes || {};
+    console.log(`\n📋 EXTRACTED ATTRIBUTES for ${document.artifactName}:`);
+    
+    let foundAnyAttributes = false;
+    
+    // Check for MODEL_NUMBER (try ASIN_MODEL_NUMBER first, then MODEL_NUMBER)
+    const modelNumber = extracted.ASIN_MODEL_NUMBER?.value || extracted.MODEL_NUMBER?.value;
+    if (modelNumber) {
+      console.log(`MODEL_NUMBER: ${modelNumber} (${extracted.ASIN_MODEL_NUMBER?.confidence || extracted.MODEL_NUMBER?.confidence || 'N/A'})`);
+      foundAnyAttributes = true;
+    }
+    
+    // Check for DOC_TYPE
+    if (extracted.DOC_TYPE?.value) {
+      console.log(`DOC_TYPE: ${extracted.DOC_TYPE.value} (${extracted.DOC_TYPE.confidence || 'N/A'})`);
+      foundAnyAttributes = true;
+    }
+    
+    if (!foundAnyAttributes) {
+      console.log("No DOC_TYPE or MODEL_NUMBER found in this document");
+    }
+
+    return { 
+      processed: true, 
+      found: searchResult.found, 
+      matches: searchResult.matches || [],
+      extractedAttributes: extracted
+    };
+
+  } catch (err) {
+    console.error(`DocuCheck: Error processing document:`, err);
+    return { processed: false, found: false };
   }
 }
 
@@ -1165,35 +1422,27 @@ async processDocument(document) {
       if (this.ui?.resultMessage) this.ui.resultMessage.textContent = message;
     }
 
-    // Clean extraction logging - only show found attributes
+    // Simplified extraction logging - only show DOC_TYPE and MODEL_NUMBER
     const extracted = searchResult.extractedAttributes || {};
     console.log(`\n📋 EXTRACTED ATTRIBUTES for ${document.artifactName}:`);
     
     let foundAnyAttributes = false;
     
-    // Only log attributes that were actually found
-    if (extracted.ASIN_MODEL_NUMBER?.value) {
-      console.log(`MODEL_NUMBER: ${extracted.ASIN_MODEL_NUMBER.value} (${extracted.ASIN_MODEL_NUMBER.confidence})`);
+    // Check for MODEL_NUMBER (try ASIN_MODEL_NUMBER first, then MODEL_NUMBER)
+    const modelNumber = extracted.ASIN_MODEL_NUMBER?.value || extracted.MODEL_NUMBER?.value;
+    if (modelNumber) {
+      console.log(`MODEL_NUMBER: ${modelNumber} (${extracted.ASIN_MODEL_NUMBER?.confidence || extracted.MODEL_NUMBER?.confidence || 'N/A'})`);
       foundAnyAttributes = true;
     }
     
-    if (extracted.ASIN_PART_NUMBER?.value) {
-      console.log(`PART_NUMBER: ${extracted.ASIN_PART_NUMBER.value} (${extracted.ASIN_PART_NUMBER.confidence})`);
-      foundAnyAttributes = true;
-    }
-    
-    if (extracted.CLIENT_SPECIFIED_AGE?.value) {
-      console.log(`AGE_RANGE: ${extracted.CLIENT_SPECIFIED_AGE.value} (${extracted.CLIENT_SPECIFIED_AGE.confidence})`);
-      foundAnyAttributes = true;
-    }
-    
+    // Check for DOC_TYPE
     if (extracted.DOC_TYPE?.value) {
-      console.log(`DOC_TYPE: ${extracted.DOC_TYPE.value} (${extracted.DOC_TYPE.confidence})`);
+      console.log(`DOC_TYPE: ${extracted.DOC_TYPE.value} (${extracted.DOC_TYPE.confidence || 'N/A'})`);
       foundAnyAttributes = true;
     }
     
     if (!foundAnyAttributes) {
-      console.log("No key attributes found in this document");
+      console.log("No DOC_TYPE or MODEL_NUMBER found in this document");
     }
 
     return { 
