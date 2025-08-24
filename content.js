@@ -208,6 +208,7 @@ function getMediaHistoryTabElement() {
 class DynamicFieldTableScanner {
   constructor() {
     this.fieldData = new Map();
+    this.targetAttributes = ['MODEL_NUMBER', 'PART_NUMBER', 'DOC_TYPE', 'ASIN_MODEL_NUMBER', 'ASIN_PART_NUMBER'];
   }
 
   // Wait for and scan the field table that appears after checkbox click
@@ -943,7 +944,7 @@ class DocumentProcessor {
     this.resetUI();
   }
 
-  async processDocument(document) {
+async processDocument(document) {
     try {
       document.checkbox.scrollIntoView({ behavior: "smooth", block: "center" });
       await this.sleep(config.domSettleDelay);
@@ -953,7 +954,7 @@ class DocumentProcessor {
         rowElement.classList.add("flash-highlight");
       }
 
-      console.log(`DocuCheck: Clicking checkbox for row ${document.rowIndex}`);
+      console.log(`DocuCheck: Clicking checkbox/radio for row ${document.rowIndex}`);
       const checkboxSuccess = await this.clickCheckboxRobust(document.checkbox);
       if (!checkboxSuccess) {
         if (rowElement) rowElement.classList.remove("flash-highlight");
@@ -966,19 +967,14 @@ class DocumentProcessor {
         return { processed: false, found: false };
       }
 
-      console.log(
-        `DocuCheck: Searching for keyword "${this.modelNumber}" in dynamic field table for row ${document.rowIndex}`
-      );
-
+      console.log(`DocuCheck: Searching for attributes and keyword "${this.modelNumber}" in dynamic field table for row ${document.rowIndex}`);
+      
       if (this.ui?.resultMessage) {
-        this.ui.resultMessage.textContent = `🔍 Searching field table...`;
+        this.ui.resultMessage.textContent = `🔍 Searching attribute table...`;
       }
 
-      // NEW: Search the dynamic field table instead of opening PDF
-      const searchResult =
-        await this.catalog.dynamicFieldScanner.scanDynamicFieldTable(
-          this.modelNumber
-        );
+      // Search the dynamic field table
+      const searchResult = await this.catalog.dynamicFieldScanner.scanDynamicFieldTable(this.modelNumber);
 
       if (rowElement) {
         setTimeout(() => {
@@ -988,20 +984,31 @@ class DocumentProcessor {
 
       // Update UI based on search results
       if (searchResult.found) {
-        const message = `✅ "${
-          this.modelNumber
-        }" found in fields: ${searchResult.matches
-          .map((m) => m.fieldName)
-          .join(", ")}`;
+        const message = `✅ "${this.modelNumber}" found in attributes: ${searchResult.matches.map(m => m.fieldName).join(', ')}`;
         console.log(message);
         if (this.ui?.resultMessage) this.ui.resultMessage.textContent = message;
-        return { processed: true, found: true, matches: searchResult.matches };
       } else {
-        const message = `❌ "${this.modelNumber}" not found in field table`;
+        const message = `❌ "${this.modelNumber}" not found in attribute table`;
         console.log(message);
         if (this.ui?.resultMessage) this.ui.resultMessage.textContent = message;
-        return { processed: true, found: false, matches: [] };
       }
+
+      // Log the extracted target attributes regardless of keyword match
+      const extracted = searchResult.extractedAttributes;
+      console.log("\n🎯 EXTRACTED TARGET ATTRIBUTES:");
+      console.log("MODEL_NUMBER:", extracted.MODEL_NUMBER?.value || "Not found");
+      console.log("PART_NUMBER:", extracted.PART_NUMBER?.value || "Not found");
+      console.log("DOC_TYPE:", extracted.DOC_TYPE?.value || "Not found");
+      console.log("ASIN_MODEL_NUMBER:", extracted.ASIN_MODEL_NUMBER?.value || "Not found");
+      console.log("ASIN_PART_NUMBER:", extracted.ASIN_PART_NUMBER?.value || "Not found");
+
+      return { 
+        processed: true, 
+        found: searchResult.found, 
+        matches: searchResult.matches,
+        extractedAttributes: extracted
+      };
+
     } catch (err) {
       console.error(`Error in document processing`, err);
       return { processed: false, found: false };
