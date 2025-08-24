@@ -61,26 +61,6 @@ const config = {
     ],
   ],
 
-  // NEW: Dynamic field table patterns that appear AFTER checkbox is clicked
-  // UPDATE THESE with the XPaths to the table that appears after checkbox selection
-  dynamicFieldTableXPathPatterns: [
-    // These patterns should point to the table that appears after clicking checkbox
-    // Example patterns - you'll need to replace these with actual XPaths
-    "/html/body/div[1]/div/div[2]/div/div/main/div/div/div/div[2]/div/div[2]/div/div/div/div/div/div/div[2]/div[2]/div/div/div/div[1]/div/div/div/div/div/div[2]/div/div/div[2]/div/div/div/div/div/div/div[2]/div/div[1]/table/tbody/tr[$ROW]/td[2]/div/span/span/div",
-    "/html/body/div[1]/div/div[2]/div/div/main/div/div/div/div[2]/div/div[2]/div/div/div/div/div/div/div[2]/div[2]/div/div/div/div[1]/div/div/div/div/div/div[2]/div/div/div[2]/div/div/div/div/div/div/div[2]/div/div[1]/table/tbody/tr[$ROW]/td[3]/div/span/span/div",
-  ],
-
-  // Generic selectors for finding the dynamic table
-  dynamicTableSelectors: [
-    "table tbody tr",
-    ".table tbody tr",
-    "[role='table'] [role='row']",
-    "div[class*='table'] div[class*='row']",
-    "table tr",
-    ".field-table tr",
-    ".details-table tr",
-  ],
-
   // Document and image patterns
   documentPatterns: ["GCC", "testReport", "testReports"],
   imagePatterns: ["productImages"],
@@ -94,7 +74,7 @@ const config = {
   retryDelay: 600,
   maxRetries: 3,
 
-  // NEW: Wait time for dynamic table to appear after checkbox click
+  // Wait time for dynamic table to appear after checkbox click
   dynamicTableWaitTime: 2000,
 
   localStorageKey: "flashOpenedDocuments",
@@ -204,428 +184,7 @@ function getMediaHistoryTabElement() {
   return getElementByXPathMultiPattern(config.mediaHistoryTabXPathPatterns);
 }
 
-// NEW: Dynamic Field Table Scanner Class - scans table that appears after checkbox click
-class DynamicFieldTableScanner {
-  constructor() {
-    this.fieldData = new Map();
-    // Only the two attributes you want
-    this.targetAttributes = [
-      'DOC_TYPE',
-      'MODEL_NUMBER',
-      'ASIN_MODEL_NUMBER' // Keep this as fallback for MODEL_NUMBER
-    ];
-  }
-
-  // Wait for and scan the field table that appears after checkbox click
-  async scanDynamicFieldTable(keyword, maxWaitTime = config.dynamicTableWaitTime) {
-    console.log("DocuCheck: Waiting for dynamic field table to appear...");
-    this.fieldData.clear();
-
-    const startTime = Date.now();
-    let tableFound = false;
-    let attemptCount = 0;
-
-    while (Date.now() - startTime < maxWaitTime && !tableFound) {
-      attemptCount++;
-      console.log(`DocuCheck: Search attempt ${attemptCount}...`);
-      
-      tableFound = this.scanForAttributeTable();
-      
-      if (!tableFound && this.fieldData.size === 0) {
-        console.log(`DocuCheck: No attribute table found in attempt ${attemptCount}, waiting 200ms...`);
-        await this.sleep(200);
-      } else {
-        tableFound = true;
-      }
-    }
-
-    console.log(`DocuCheck: Scan complete. Found ${this.fieldData.size} total attributes`);
-    
-    // DEBUG: Show all found attributes
-    console.log("=== ALL FOUND ATTRIBUTES ===");
-    for (const [key, value] of this.fieldData) {
-      console.log(`Key: "${key}" -> Value: "${value.value}" (${value.confidence})`);
-    }
-    console.log("=== END ALL ATTRIBUTES ===");
-
-    if (tableFound || this.fieldData.size > 0) {
-      const matches = this.findMatchingFields(keyword);
-      const extractedAttributes = this.extractTargetAttributes();
-      
-      return {
-        found: matches.length > 0,
-        matches: matches,
-        fieldData: this.fieldData,
-        extractedAttributes: extractedAttributes
-      };
-    } else {
-      console.log(`DocuCheck: No attributes found within ${maxWaitTime}ms`);
-      return {
-        found: false,
-        matches: [],
-        fieldData: this.fieldData,
-        extractedAttributes: {}
-      };
-    }
-  }
-
-  scanForAttributeTable() {
-    try {
-      let foundAny = false;
-      const tables = document.querySelectorAll('table');
-      
-      console.log(`DocuCheck: Scanning ${tables.length} tables on page`);
-      
-      for (let tableIndex = 0; tableIndex < tables.length; tableIndex++) {
-        const table = tables[tableIndex];
-        const headerRow = table.querySelector('tr');
-        
-        if (headerRow) {
-          const headers = Array.from(headerRow.querySelectorAll('th, td')).map(cell => cell.textContent.trim());
-          
-          console.log(`Table ${tableIndex + 1} headers:`, headers);
-          
-          // Check if this matches our expected structure
-          if (headers.length >= 4 && 
-              (headers.includes('Attribute') && headers.includes('Answer')) ||
-              (headers.includes('Question') && headers.includes('Confidence'))) {
-            
-            console.log(`DocuCheck: ✅ Table ${tableIndex + 1} matches our structure!`);
-            
-            const rows = table.querySelectorAll('tbody tr');
-            console.log(`DocuCheck: Processing ${rows.length} rows from table ${tableIndex + 1}`);
-            
-            rows.forEach((row, rowIndex) => {
-              const cells = row.querySelectorAll('td');
-              
-              if (cells.length >= 3) {
-                const cell0 = cells[0] ? cells[0].textContent.trim() : '';
-                const cell1 = cells[1] ? cells[1].textContent.trim() : '';
-                const cell2 = cells[2] ? cells[2].textContent.trim() : '';
-                const cell3 = cells[3] ? cells[3].textContent.trim() : '';
-                
-                console.log(`Row ${rowIndex + 1}: [${cell0}] [${cell1}] [${cell2}] [${cell3}]`);
-                
-                // Try different column mappings based on your debug data
-                let attribute, answer, confidence;
-                
-                // From your debug: Row 1: (4) ['', 'ASIN_MODEL_NUMBER', 'unknown', '']
-                // This suggests: cell[1] = attribute, cell[2] = answer, cell[3] = confidence
-                if (cell1 && cell1 !== 'Question' && cell1 !== '') {
-                  attribute = cell1;
-                  answer = cell2;
-                  confidence = cell3;
-                  
-                  console.log(`Found attribute: "${attribute}" = "${answer}" (${confidence})`);
-                  
-                  this.fieldData.set(attribute, {
-                    value: answer,
-                    confidence: confidence,
-                    attribute: attribute
-                  });
-                  
-                  foundAny = true;
-                }
-              }
-            });
-          } else {
-            console.log(`Table ${tableIndex + 1} does not match our structure`);
-          }
-        }
-      }
-      
-      return foundAny;
-    } catch (error) {
-      console.log("DocuCheck: Error scanning for attribute table:", error);
-      return false;
-    }
-  }
-
-  extractTargetAttributes() {
-    const extracted = {};
-    
-    console.log("=== EXTRACTING TARGET ATTRIBUTES ===");
-    console.log("Target attributes to find:", this.targetAttributes);
-    console.log("Available attributes:", Array.from(this.fieldData.keys()));
-    
-    for (const targetAttr of this.targetAttributes) {
-      console.log(`\n--- Looking for: ${targetAttr} ---`);
-      
-      // First try exact match
-      if (this.fieldData.has(targetAttr)) {
-        const fieldData = this.fieldData.get(targetAttr);
-        extracted[targetAttr] = {
-          attribute: fieldData.attribute,
-          value: fieldData.value,
-          confidence: fieldData.confidence,
-          matchedField: targetAttr
-        };
-        console.log(`✅ EXACT MATCH: ${targetAttr} = "${fieldData.value}"`);
-      } else {
-        console.log(`❌ No exact match for: ${targetAttr}`);
-        
-        // Try partial match
-        const lowerTarget = targetAttr.toLowerCase();
-        let found = false;
-        
-        for (const [fieldName, fieldData] of this.fieldData) {
-          const lowerFieldName = fieldName.toLowerCase();
-          
-          console.log(`  Checking: "${fieldName}" vs "${targetAttr}"`);
-          console.log(`  Lower: "${lowerFieldName}" contains "${lowerTarget}"? ${lowerFieldName.includes(lowerTarget)}`);
-          console.log(`  Lower: "${lowerTarget}" contains "${lowerFieldName}"? ${lowerTarget.includes(lowerFieldName)}`);
-          
-          if (lowerFieldName.includes(lowerTarget) || lowerTarget.includes(lowerFieldName)) {
-            extracted[targetAttr] = {
-              attribute: fieldData.attribute,
-              value: fieldData.value,
-              confidence: fieldData.confidence,
-              matchedField: fieldName
-            };
-            console.log(`✅ PARTIAL MATCH: ${targetAttr} matched with "${fieldName}" = "${fieldData.value}"`);
-            found = true;
-            break;
-          }
-        }
-        
-        if (!found) {
-          console.log(`❌ NO MATCH found for: ${targetAttr}`);
-        }
-      }
-    }
-    
-    console.log("=== EXTRACTION COMPLETE ===");
-    console.log("Extracted:", Object.keys(extracted));
-    
-    return extracted;
-  }
-
-  findMatchingFields(keyword) {
-    const matches = [];
-    if (!keyword) return matches;
-    
-    const keywordLower = keyword.toLowerCase();
-
-    for (const [fieldName, fieldData] of this.fieldData) {
-      if (fieldData.value.toLowerCase().includes(keywordLower)) {
-        matches.push({
-          fieldName: fieldData.attribute,
-          fieldValue: fieldData.value,
-          confidence: fieldData.confidence,
-          matchType: 'value'
-        });
-      }
-      if (fieldName.toLowerCase().includes(keywordLower)) {
-        matches.push({
-          fieldName: fieldData.attribute,
-          fieldValue: fieldData.value,
-          confidence: fieldData.confidence,
-          matchType: 'name'
-        });
-      }
-    }
-
-    return matches;
-  }
-
-  logFoundFields() {
-    // This method is called but we're doing the logging in scanDynamicFieldTable now
-  }
-
-  sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  scanWithDynamicXPathPatterns() {
-    try {
-      let foundAny = false;
-
-      for (let rowIndex = 1; rowIndex <= 50; rowIndex++) {
-        let fieldName = null;
-        let fieldValue = null;
-
-        // Try to find field name and value using dynamic XPath patterns
-        for (const pattern of config.dynamicFieldTableXPathPatterns) {
-          const xpath = pattern.replace("$ROW", rowIndex);
-          const element = document.evaluate(
-            xpath,
-            document,
-            null,
-            XPathResult.FIRST_ORDERED_NODE_TYPE,
-            null
-          ).singleNodeValue;
-
-          if (element) {
-            const text = element.textContent.trim();
-            if (text) {
-              if (pattern.includes("td[1]")) {
-                fieldName = text;
-              } else if (pattern.includes("td[2]")) {
-                fieldValue = text;
-              }
-            }
-          }
-        }
-
-        if (fieldName && fieldValue) {
-          this.fieldData.set(fieldName.toLowerCase(), fieldValue);
-          console.log(
-            `DocuCheck: Found dynamic field: ${fieldName} = ${fieldValue}`
-          );
-          foundAny = true;
-        }
-
-        // Stop if we hit empty rows
-        if (!fieldName && !fieldValue && rowIndex > 5) {
-          break;
-        }
-      }
-
-      return foundAny;
-    } catch (error) {
-      console.log(
-        "DocuCheck: Error scanning with dynamic XPath patterns:",
-        error
-      );
-      return false;
-    }
-  }
-
-  scanWithGenericSelectors() {
-    try {
-      let foundAny = false;
-
-      for (const selector of config.dynamicTableSelectors) {
-        const rows = document.querySelectorAll(selector);
-
-        // Only look at recently added elements (appeared in last few seconds)
-        for (const row of rows) {
-          const cells = row.querySelectorAll("td, th, div[class*='cell']");
-
-          if (cells.length >= 2) {
-            const fieldName = cells[0].textContent.trim();
-            const fieldValue = cells[1].textContent.trim();
-
-            if (fieldName && fieldValue && this.isLikelyFieldName(fieldName)) {
-              this.fieldData.set(fieldName.toLowerCase(), fieldValue);
-              console.log(
-                `DocuCheck: Found dynamic field (generic): ${fieldName} = ${fieldValue}`
-              );
-              foundAny = true;
-            }
-          }
-        }
-      }
-
-      return foundAny;
-    } catch (error) {
-      console.log("DocuCheck: Error scanning with generic selectors:", error);
-      return false;
-    }
-  }
-
-  scanForNewFieldValuePatterns() {
-    try {
-      let foundAny = false;
-
-      // Look for common patterns like "Label: Value" in recently added DOM elements
-      const allElements = document.querySelectorAll("div, span, p, td, th");
-
-      for (const element of allElements) {
-        const text = element.textContent.trim();
-
-        // Pattern 1: "Field Name: Field Value"
-        if (text.includes(":")) {
-          const parts = text.split(":");
-          if (parts.length === 2) {
-            const fieldName = parts[0].trim();
-            const fieldValue = parts[1].trim();
-
-            if (this.isLikelyFieldName(fieldName) && fieldValue) {
-              this.fieldData.set(fieldName.toLowerCase(), fieldValue);
-              console.log(
-                `DocuCheck: Found dynamic field (pattern): ${fieldName} = ${fieldValue}`
-              );
-              foundAny = true;
-            }
-          }
-        }
-      }
-
-      return foundAny;
-    } catch (error) {
-      console.log("DocuCheck: Error scanning for field-value patterns:", error);
-      return false;
-    }
-  }
-
-  isLikelyFieldName(text) {
-    // Check if text looks like a field name
-    const fieldNamePatterns = [
-      /ASIN_MODEL_NUMBER/i,
-      /MODEL_NUMBER/i,
-      /ASIN_PART_NUMBER/i,
-      /type/i,
-      /id/i,
-      /code/i,
-      /version/i,
-      /part/i,
-      /serial/i,
-      /product/i,
-      /item/i,
-      /category/i,
-      /brand/i,
-      /manufacturer/i,
-      /description/i,
-      /specification/i,
-    ];
-
-    return (
-      fieldNamePatterns.some((pattern) => pattern.test(text)) ||
-      (text.length > 2 && text.length < 50 && /^[a-zA-Z\s\-_]+$/.test(text))
-    );
-  }
-
-  // Check if a keyword matches any field value
-  findMatchingFields(keyword) {
-    const matches = [];
-    if (!keyword) return matches;
-
-    const keywordLower = keyword.toLowerCase();
-
-    for (const [fieldName, fieldValue] of this.fieldData) {
-      if (fieldValue.toLowerCase().includes(keywordLower)) {
-        matches.push({
-          fieldName: fieldName,
-          fieldValue: fieldValue,
-          matchType: "value",
-        });
-      }
-      if (fieldName.includes(keywordLower)) {
-        matches.push({
-          fieldName: fieldName,
-          fieldValue: fieldValue,
-          matchType: "name",
-        });
-      }
-    }
-
-    return matches;
-  }
-
-  logFoundFields() {
-    if (this.fieldData.size > 0) {
-      console.log("DocuCheck: Dynamic field-value pairs found:");
-      for (const [fieldName, fieldValue] of this.fieldData) {
-        console.log(`  ${fieldName}: ${fieldValue}`);
-      }
-    }
-  }
-
-  sleep(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-// Simplified Scanner - Only extracts DOC_TYPE and MODEL_NUMBER
+// Simplified Dynamic Field Table Scanner - Only extracts DOC_TYPE and MODEL_NUMBER
 class DynamicFieldTableScanner {
   constructor() {
     this.fieldData = new Map();
@@ -798,91 +357,6 @@ class DynamicFieldTableScanner {
 
   sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
-  }
-}
-
-// Updated processDocument method - only shows DOC_TYPE and MODEL_NUMBER
-async function processDocumentSimplified(document) {
-  try {
-    document.checkbox.scrollIntoView({ behavior: "smooth", block: "center" });
-    await this.sleep(config.domSettleDelay);
-
-    const rowElement = document.checkbox.closest("tr");
-    if (rowElement) {
-      rowElement.classList.add("flash-highlight");
-    }
-
-    console.log(`DocuCheck: Processing row ${document.rowIndex} - ${document.artifactName}`);
-    
-    const checkboxSuccess = await this.clickCheckboxRobust(document.checkbox);
-    if (!checkboxSuccess) {
-      if (rowElement) rowElement.classList.remove("flash-highlight");
-      return { processed: false, found: false };
-    }
-
-    const isSelected = await this.validateCheckboxSelected(document.checkbox);
-    if (!isSelected) {
-      if (rowElement) rowElement.classList.remove("flash-highlight");
-      return { processed: false, found: false };
-    }
-
-    if (this.ui?.resultMessage) {
-      this.ui.resultMessage.textContent = `🔍 Extracting attributes...`;
-    }
-
-    // Search the dynamic field table
-    const searchResult = await this.catalog.dynamicFieldScanner.scanDynamicFieldTable(this.modelNumber);
-
-    if (rowElement) {
-      setTimeout(() => {
-        rowElement.classList.remove("flash-highlight");
-      }, 300);
-    }
-
-    // Update UI based on search results
-    if (searchResult.found) {
-      const message = `✅ Found "${this.modelNumber}" in document`;
-      console.log(message);
-      if (this.ui?.resultMessage) this.ui.resultMessage.textContent = message;
-    } else {
-      const message = `❌ "${this.modelNumber}" not found`;
-      console.log(message);
-      if (this.ui?.resultMessage) this.ui.resultMessage.textContent = message;
-    }
-
-    // Simplified extraction logging - only show DOC_TYPE and MODEL_NUMBER
-    const extracted = searchResult.extractedAttributes || {};
-    console.log(`\n📋 EXTRACTED ATTRIBUTES for ${document.artifactName}:`);
-    
-    let foundAnyAttributes = false;
-    
-    // Check for MODEL_NUMBER (try ASIN_MODEL_NUMBER first, then MODEL_NUMBER)
-    const modelNumber = extracted.ASIN_MODEL_NUMBER?.value || extracted.MODEL_NUMBER?.value;
-    if (modelNumber) {
-      console.log(`MODEL_NUMBER: ${modelNumber} (${extracted.ASIN_MODEL_NUMBER?.confidence || extracted.MODEL_NUMBER?.confidence || 'N/A'})`);
-      foundAnyAttributes = true;
-    }
-    
-    // Check for DOC_TYPE
-    if (extracted.DOC_TYPE?.value) {
-      console.log(`DOC_TYPE: ${extracted.DOC_TYPE.value} (${extracted.DOC_TYPE.confidence || 'N/A'})`);
-      foundAnyAttributes = true;
-    }
-    
-    if (!foundAnyAttributes) {
-      console.log("No DOC_TYPE or MODEL_NUMBER found in this document");
-    }
-
-    return { 
-      processed: true, 
-      found: searchResult.found, 
-      matches: searchResult.matches || [],
-      extractedAttributes: extracted
-    };
-
-  } catch (err) {
-    console.error(`DocuCheck: Error processing document:`, err);
-    return { processed: false, found: false };
   }
 }
 
@@ -1374,89 +848,89 @@ class DocumentProcessor {
     this.resetUI();
   }
 
-async processDocument(document) {
-  try {
-    document.checkbox.scrollIntoView({ behavior: "smooth", block: "center" });
-    await this.sleep(config.domSettleDelay);
+  async processDocument(document) {
+    try {
+      document.checkbox.scrollIntoView({ behavior: "smooth", block: "center" });
+      await this.sleep(config.domSettleDelay);
 
-    const rowElement = document.checkbox.closest("tr");
-    if (rowElement) {
-      rowElement.classList.add("flash-highlight");
-    }
+      const rowElement = document.checkbox.closest("tr");
+      if (rowElement) {
+        rowElement.classList.add("flash-highlight");
+      }
 
-    console.log(`DocuCheck: Processing row ${document.rowIndex} - ${document.artifactName}`);
-    
-    const checkboxSuccess = await this.clickCheckboxRobust(document.checkbox);
-    if (!checkboxSuccess) {
-      if (rowElement) rowElement.classList.remove("flash-highlight");
+      console.log(`DocuCheck: Processing row ${document.rowIndex} - ${document.artifactName}`);
+      
+      const checkboxSuccess = await this.clickCheckboxRobust(document.checkbox);
+      if (!checkboxSuccess) {
+        if (rowElement) rowElement.classList.remove("flash-highlight");
+        return { processed: false, found: false };
+      }
+
+      const isSelected = await this.validateCheckboxSelected(document.checkbox);
+      if (!isSelected) {
+        if (rowElement) rowElement.classList.remove("flash-highlight");
+        return { processed: false, found: false };
+      }
+
+      if (this.ui?.resultMessage) {
+        this.ui.resultMessage.textContent = `🔍 Extracting attributes...`;
+      }
+
+      // Search the dynamic field table
+      const searchResult = await this.catalog.dynamicFieldScanner.scanDynamicFieldTable(this.modelNumber);
+
+      if (rowElement) {
+        setTimeout(() => {
+          rowElement.classList.remove("flash-highlight");
+        }, 300);
+      }
+
+      // Update UI based on search results
+      if (searchResult.found) {
+        const message = `✅ Found "${this.modelNumber}" in document`;
+        console.log(message);
+        if (this.ui?.resultMessage) this.ui.resultMessage.textContent = message;
+      } else {
+        const message = `❌ "${this.modelNumber}" not found`;
+        console.log(message);
+        if (this.ui?.resultMessage) this.ui.resultMessage.textContent = message;
+      }
+
+      // Simplified extraction logging - only show DOC_TYPE and MODEL_NUMBER
+      const extracted = searchResult.extractedAttributes || {};
+      console.log(`\n📋 EXTRACTED ATTRIBUTES for ${document.artifactName}:`);
+      
+      let foundAnyAttributes = false;
+      
+      // Check for MODEL_NUMBER (try ASIN_MODEL_NUMBER first, then MODEL_NUMBER)
+      const modelNumber = extracted.ASIN_MODEL_NUMBER?.value || extracted.MODEL_NUMBER?.value;
+      if (modelNumber) {
+        console.log(`MODEL_NUMBER: ${modelNumber} (${extracted.ASIN_MODEL_NUMBER?.confidence || extracted.MODEL_NUMBER?.confidence || 'N/A'})`);
+        foundAnyAttributes = true;
+      }
+      
+      // Check for DOC_TYPE
+      if (extracted.DOC_TYPE?.value) {
+        console.log(`DOC_TYPE: ${extracted.DOC_TYPE.value} (${extracted.DOC_TYPE.confidence || 'N/A'})`);
+        foundAnyAttributes = true;
+      }
+      
+      if (!foundAnyAttributes) {
+        console.log("No DOC_TYPE or MODEL_NUMBER found in this document");
+      }
+
+      return { 
+        processed: true, 
+        found: searchResult.found, 
+        matches: searchResult.matches || [],
+        extractedAttributes: extracted
+      };
+
+    } catch (err) {
+      console.error(`DocuCheck: Error processing document:`, err);
       return { processed: false, found: false };
     }
-
-    const isSelected = await this.validateCheckboxSelected(document.checkbox);
-    if (!isSelected) {
-      if (rowElement) rowElement.classList.remove("flash-highlight");
-      return { processed: false, found: false };
-    }
-
-    if (this.ui?.resultMessage) {
-      this.ui.resultMessage.textContent = `🔍 Extracting attributes...`;
-    }
-
-    // Search the dynamic field table
-    const searchResult = await this.catalog.dynamicFieldScanner.scanDynamicFieldTable(this.modelNumber);
-
-    if (rowElement) {
-      setTimeout(() => {
-        rowElement.classList.remove("flash-highlight");
-      }, 300);
-    }
-
-    // Update UI based on search results
-    if (searchResult.found) {
-      const message = `✅ Found "${this.modelNumber}" in document`;
-      console.log(message);
-      if (this.ui?.resultMessage) this.ui.resultMessage.textContent = message;
-    } else {
-      const message = `❌ "${this.modelNumber}" not found`;
-      console.log(message);
-      if (this.ui?.resultMessage) this.ui.resultMessage.textContent = message;
-    }
-
-    // Simplified extraction logging - only show DOC_TYPE and MODEL_NUMBER
-    const extracted = searchResult.extractedAttributes || {};
-    console.log(`\n📋 EXTRACTED ATTRIBUTES for ${document.artifactName}:`);
-    
-    let foundAnyAttributes = false;
-    
-    // Check for MODEL_NUMBER (try ASIN_MODEL_NUMBER first, then MODEL_NUMBER)
-    const modelNumber = extracted.ASIN_MODEL_NUMBER?.value || extracted.MODEL_NUMBER?.value;
-    if (modelNumber) {
-      console.log(`MODEL_NUMBER: ${modelNumber} (${extracted.ASIN_MODEL_NUMBER?.confidence || extracted.MODEL_NUMBER?.confidence || 'N/A'})`);
-      foundAnyAttributes = true;
-    }
-    
-    // Check for DOC_TYPE
-    if (extracted.DOC_TYPE?.value) {
-      console.log(`DOC_TYPE: ${extracted.DOC_TYPE.value} (${extracted.DOC_TYPE.confidence || 'N/A'})`);
-      foundAnyAttributes = true;
-    }
-    
-    if (!foundAnyAttributes) {
-      console.log("No DOC_TYPE or MODEL_NUMBER found in this document");
-    }
-
-    return { 
-      processed: true, 
-      found: searchResult.found, 
-      matches: searchResult.matches || [],
-      extractedAttributes: extracted
-    };
-
-  } catch (err) {
-    console.error(`DocuCheck: Error processing document:`, err);
-    return { processed: false, found: false };
   }
-}
 
   async clickCheckboxRobust(checkbox) {
     for (let attempt = 0; attempt < config.maxRetries; attempt++) {
