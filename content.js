@@ -1,6 +1,6 @@
-// Simplified Flash Extension with Fixed Top-Left UI and Proper Document Processing
+// Enhanced Content Script with Checkbox + Dynamic Field Table Search
 console.log(
-  "Flash: Loading simplified extension with fixed UI and proper document filtering..."
+  "DocuCheck: Loading enhanced extension with checkbox field table search..."
 );
 
 const config = {
@@ -24,13 +24,6 @@ const config = {
     "/html/body/div[2]/div/div[2]/div/div/main/div/div/div/div[2]/div/div[2]/div/div/div/div/div/div/div[2]/div[2]/div/div/div/div[1]/div/div/div/div/div/div[1]/div/div/div[2]/div/div[1]/table/tbody/tr[$ROW]/td[5]/div",
     "/html/body/div[3]/div/div[2]/div/div/main/div/div/div/div[2]/div/div[2]/div/div/div/div/div/div/div[2]/div[2]/div/div/div/div[1]/div/div/div/div/div/div[1]/div/div/div[2]/div/div[1]/table/tbody/tr[$ROW]/td[5]/div",
     "/html/body/div[4]/div/div[2]/div/div/main/div/div/div/div[2]/div/div[2]/div/div/div/div/div/div/div[2]/div[2]/div/div/div/div[1]/div/div/div/div/div/div[1]/div/div/div[2]/div/div[1]/table/tbody/tr[$ROW]/td[5]/div",
-  ],
-
-  openButtonXPathPatterns: [
-    "/html/body/div[1]/div/div[2]/div/div/main/div/div/div/div[2]/div/div[2]/div/div/div/div/div/div/div[2]/div[2]/div/div/div/div[2]/div/div/div[1]/div/div/div[2]/div/div[3]/a",
-    "/html/body/div[2]/div/div[2]/div/div/main/div/div/div/div[2]/div/div[2]/div/div/div/div/div/div/div[2]/div[2]/div/div/div/div[2]/div/div/div[1]/div/div/div[2]/div/div[3]/a",
-    "/html/body/div[3]/div/div[2]/div/div/main/div/div/div/div[2]/div/div[2]/div/div/div/div/div/div/div[2]/div[2]/div/div/div/div[2]/div/div/div[1]/div/div/div[2]/div/div[3]/a",
-    "/html/body/div[4]/div/div[2]/div/div/main/div/div/div/div[2]/div/div[2]/div/div/div/div/div/div/div[2]/div[2]/div/div/div/div[2]/div/div/div[1]/div/div/div[2]/div/div[3]/a",
   ],
 
   cellXPathBasesPatterns: [
@@ -68,6 +61,26 @@ const config = {
     ],
   ],
 
+  // NEW: Dynamic field table patterns that appear AFTER checkbox is clicked
+  // UPDATE THESE with the XPaths to the table that appears after checkbox selection
+  dynamicFieldTableXPathPatterns: [
+    // These patterns should point to the table that appears after clicking checkbox
+    // Example patterns - you'll need to replace these with actual XPaths
+    "/html/body/div[1]/div/div[2]/div/div/main/div/div/div/div[2]/div/div[2]/div/div/div/div/div/div/div[2]/div[2]/div/div/div/div[1]/div/div/div/div/div/div[2]/div/div/div[2]/div/div/div/div/div/div/div[2]/div/div[1]/table/tbody/tr[$ROW]/td[2]/div/span/span/div",
+    "/html/body/div[1]/div/div[2]/div/div/main/div/div/div/div[2]/div/div[2]/div/div/div/div/div/div/div[2]/div[2]/div/div/div/div[1]/div/div/div/div/div/div[2]/div/div/div[2]/div/div/div/div/div/div/div[2]/div/div[1]/table/tbody/tr[$ROW]/td[3]/div/span/span/div",
+  ],
+
+  // Generic selectors for finding the dynamic table
+  dynamicTableSelectors: [
+    "table tbody tr",
+    ".table tbody tr",
+    "[role='table'] [role='row']",
+    "div[class*='table'] div[class*='row']",
+    "table tr",
+    ".field-table tr",
+    ".details-table tr",
+  ],
+
   // Document and image patterns
   documentPatterns: ["GCC", "testReport", "testReports"],
   imagePatterns: ["productImages"],
@@ -81,25 +94,12 @@ const config = {
   retryDelay: 600,
   maxRetries: 3,
 
+  // NEW: Wait time for dynamic table to appear after checkbox click
+  dynamicTableWaitTime: 2000,
+
   localStorageKey: "flashOpenedDocuments",
 };
 
-// Initialize PDF.js using Chrome's built-in version
-if (typeof window.pdfjsLib === "undefined") {
-  // Load PDF.js from Chrome's built-in version
-  const script = document.createElement("script");
-  script.src = "chrome://resources/pdf/pdf.js";
-  document.head.appendChild(script);
-
-  // Set worker
-  script.onload = () => {
-    if (window.pdfjsLib) {
-      window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-        "chrome://resources/pdf/pdf.worker.js";
-      console.log("Flash: Using Chrome built-in PDF.js");
-    }
-  };
-}
 // Helper function to extract yyyy-mm-dd from various date formats
 function extractDateOnly(dateString) {
   try {
@@ -109,17 +109,14 @@ function extractDateOnly(dateString) {
 
     const trimmed = dateString.trim();
 
-    // Handle ISO format with timezone (2025-07-07T07:23:16.489Z)
     if (trimmed.includes("T")) {
       return trimmed.split("T")[0];
     }
 
-    // Handle existing yyyy-mm-dd format
     if (trimmed.match(/^\d{4}-\d{2}-\d{2}$/)) {
       return trimmed;
     }
 
-    // Handle other date formats by parsing and reformatting
     const date = new Date(trimmed);
     if (!isNaN(date.getTime())) {
       return date.toISOString().split("T")[0];
@@ -127,7 +124,10 @@ function extractDateOnly(dateString) {
 
     return trimmed;
   } catch (error) {
-    console.log(`Flash: Error extracting date from "${dateString}":`, error);
+    console.log(
+      `DocuCheck: Error extracting date from "${dateString}":`,
+      error
+    );
     return dateString || "";
   }
 }
@@ -185,7 +185,7 @@ function getElementByXPathMultiPattern(xpathPatterns, rowIndex = null) {
         return element;
       }
     } catch (error) {
-      console.log(`Flash: XPath pattern failed: ${pattern}`, error);
+      console.log(`DocuCheck: XPath pattern failed: ${pattern}`, error);
     }
   }
   return null;
@@ -200,26 +200,274 @@ function getDateCellElement(rowIndex) {
   return getElementByXPathMultiPattern(config.dateCellXPathPatterns, rowIndex);
 }
 
-function getOpenButtonElement() {
-  return getElementByXPathMultiPattern(config.openButtonXPathPatterns);
-}
-
 function getMediaHistoryTabElement() {
   return getElementByXPathMultiPattern(config.mediaHistoryTabXPathPatterns);
 }
 
-// Document cataloging class with proper filtering
+// NEW: Dynamic Field Table Scanner Class - scans table that appears after checkbox click
+class DynamicFieldTableScanner {
+  constructor() {
+    this.fieldData = new Map();
+  }
+
+  // Wait for and scan the field table that appears after checkbox click
+  async scanDynamicFieldTable(
+    keyword,
+    maxWaitTime = config.dynamicTableWaitTime
+  ) {
+    console.log("DocuCheck: Waiting for dynamic field table to appear...");
+    this.fieldData.clear();
+
+    const startTime = Date.now();
+    let tableFound = false;
+
+    // Wait for table to appear with periodic checks
+    while (Date.now() - startTime < maxWaitTime && !tableFound) {
+      // Method 1: Try specific XPath patterns for the dynamic table
+      tableFound = this.scanWithDynamicXPathPatterns();
+
+      // Method 2: Try generic table selectors if XPath patterns don't work
+      if (!tableFound) {
+        tableFound = this.scanWithGenericSelectors();
+      }
+
+      // Method 3: Look for recently added DOM elements with field patterns
+      if (!tableFound) {
+        tableFound = this.scanForNewFieldValuePatterns();
+      }
+
+      if (!tableFound) {
+        await this.sleep(200); // Wait 200ms before next check
+      }
+    }
+
+    if (tableFound) {
+      console.log(
+        `DocuCheck: Found dynamic table with ${this.fieldData.size} field-value pairs`
+      );
+      this.logFoundFields();
+
+      // Search for the keyword in the found fields
+      const matches = this.findMatchingFields(keyword);
+      return {
+        found: matches.length > 0,
+        matches: matches,
+        fieldData: this.fieldData,
+      };
+    } else {
+      console.log("DocuCheck: Dynamic field table not found within timeout");
+      return {
+        found: false,
+        matches: [],
+        fieldData: this.fieldData,
+      };
+    }
+  }
+
+  scanWithDynamicXPathPatterns() {
+    try {
+      let foundAny = false;
+
+      for (let rowIndex = 1; rowIndex <= 50; rowIndex++) {
+        let fieldName = null;
+        let fieldValue = null;
+
+        // Try to find field name and value using dynamic XPath patterns
+        for (const pattern of config.dynamicFieldTableXPathPatterns) {
+          const xpath = pattern.replace("$ROW", rowIndex);
+          const element = document.evaluate(
+            xpath,
+            document,
+            null,
+            XPathResult.FIRST_ORDERED_NODE_TYPE,
+            null
+          ).singleNodeValue;
+
+          if (element) {
+            const text = element.textContent.trim();
+            if (text) {
+              if (pattern.includes("td[1]")) {
+                fieldName = text;
+              } else if (pattern.includes("td[2]")) {
+                fieldValue = text;
+              }
+            }
+          }
+        }
+
+        if (fieldName && fieldValue) {
+          this.fieldData.set(fieldName.toLowerCase(), fieldValue);
+          console.log(
+            `DocuCheck: Found dynamic field: ${fieldName} = ${fieldValue}`
+          );
+          foundAny = true;
+        }
+
+        // Stop if we hit empty rows
+        if (!fieldName && !fieldValue && rowIndex > 5) {
+          break;
+        }
+      }
+
+      return foundAny;
+    } catch (error) {
+      console.log(
+        "DocuCheck: Error scanning with dynamic XPath patterns:",
+        error
+      );
+      return false;
+    }
+  }
+
+  scanWithGenericSelectors() {
+    try {
+      let foundAny = false;
+
+      for (const selector of config.dynamicTableSelectors) {
+        const rows = document.querySelectorAll(selector);
+
+        // Only look at recently added elements (appeared in last few seconds)
+        for (const row of rows) {
+          const cells = row.querySelectorAll("td, th, div[class*='cell']");
+
+          if (cells.length >= 2) {
+            const fieldName = cells[0].textContent.trim();
+            const fieldValue = cells[1].textContent.trim();
+
+            if (fieldName && fieldValue && this.isLikelyFieldName(fieldName)) {
+              this.fieldData.set(fieldName.toLowerCase(), fieldValue);
+              console.log(
+                `DocuCheck: Found dynamic field (generic): ${fieldName} = ${fieldValue}`
+              );
+              foundAny = true;
+            }
+          }
+        }
+      }
+
+      return foundAny;
+    } catch (error) {
+      console.log("DocuCheck: Error scanning with generic selectors:", error);
+      return false;
+    }
+  }
+
+  scanForNewFieldValuePatterns() {
+    try {
+      let foundAny = false;
+
+      // Look for common patterns like "Label: Value" in recently added DOM elements
+      const allElements = document.querySelectorAll("div, span, p, td, th");
+
+      for (const element of allElements) {
+        const text = element.textContent.trim();
+
+        // Pattern 1: "Field Name: Field Value"
+        if (text.includes(":")) {
+          const parts = text.split(":");
+          if (parts.length === 2) {
+            const fieldName = parts[0].trim();
+            const fieldValue = parts[1].trim();
+
+            if (this.isLikelyFieldName(fieldName) && fieldValue) {
+              this.fieldData.set(fieldName.toLowerCase(), fieldValue);
+              console.log(
+                `DocuCheck: Found dynamic field (pattern): ${fieldName} = ${fieldValue}`
+              );
+              foundAny = true;
+            }
+          }
+        }
+      }
+
+      return foundAny;
+    } catch (error) {
+      console.log("DocuCheck: Error scanning for field-value patterns:", error);
+      return false;
+    }
+  }
+
+  isLikelyFieldName(text) {
+    // Check if text looks like a field name
+    const fieldNamePatterns = [
+      /ASIN_MODEL_NUMBER/i,
+      /MODEL_NUMBER/i,
+      /ASIN_PART_NUMBER/i,
+      /type/i,
+      /id/i,
+      /code/i,
+      /version/i,
+      /part/i,
+      /serial/i,
+      /product/i,
+      /item/i,
+      /category/i,
+      /brand/i,
+      /manufacturer/i,
+      /description/i,
+      /specification/i,
+    ];
+
+    return (
+      fieldNamePatterns.some((pattern) => pattern.test(text)) ||
+      (text.length > 2 && text.length < 50 && /^[a-zA-Z\s\-_]+$/.test(text))
+    );
+  }
+
+  // Check if a keyword matches any field value
+  findMatchingFields(keyword) {
+    const matches = [];
+    if (!keyword) return matches;
+
+    const keywordLower = keyword.toLowerCase();
+
+    for (const [fieldName, fieldValue] of this.fieldData) {
+      if (fieldValue.toLowerCase().includes(keywordLower)) {
+        matches.push({
+          fieldName: fieldName,
+          fieldValue: fieldValue,
+          matchType: "value",
+        });
+      }
+      if (fieldName.includes(keywordLower)) {
+        matches.push({
+          fieldName: fieldName,
+          fieldValue: fieldValue,
+          matchType: "name",
+        });
+      }
+    }
+
+    return matches;
+  }
+
+  logFoundFields() {
+    if (this.fieldData.size > 0) {
+      console.log("DocuCheck: Dynamic field-value pairs found:");
+      for (const [fieldName, fieldValue] of this.fieldData) {
+        console.log(`  ${fieldName}: ${fieldValue}`);
+      }
+    }
+  }
+
+  sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+}
+
+// Enhanced Document Catalog with dynamic field table integration
 class DocumentCatalog {
   constructor() {
     this.documents = new Map();
     this.currentSessionProcessed = new Set();
     this.detectedPattern = null;
+    this.dynamicFieldScanner = new DynamicFieldTableScanner();
   }
 
   detectWorkingPattern() {
     if (this.detectedPattern !== null) return this.detectedPattern;
 
-    console.log("Flash: Detecting working XPath pattern...");
+    console.log("DocuCheck: Detecting working XPath pattern...");
 
     for (
       let patternIndex = 0;
@@ -229,12 +477,14 @@ class DocumentCatalog {
       const testElement = this.testPattern(patternIndex, 1);
       if (testElement) {
         this.detectedPattern = patternIndex;
-        console.log(`Flash: Detected working pattern index: ${patternIndex}`);
+        console.log(
+          `DocuCheck: Detected working pattern index: ${patternIndex}`
+        );
         return patternIndex;
       }
     }
 
-    console.log("Flash: No working pattern detected, using pattern 0");
+    console.log("DocuCheck: No working pattern detected, using pattern 0");
     this.detectedPattern = 0;
     return 0;
   }
@@ -296,7 +546,7 @@ class DocumentCatalog {
   }
 
   scanAllDocuments() {
-    console.log("Flash: Starting document scan...");
+    console.log("DocuCheck: Starting document scan...");
     this.documents.clear();
 
     const workingPatternIndex = this.detectWorkingPattern();
@@ -315,7 +565,7 @@ class DocumentCatalog {
         consecutiveEmptyRows++;
         if (rowIndex > 10 && consecutiveEmptyRows >= maxConsecutiveEmpty) {
           console.log(
-            `Flash: Stopping scan - found ${consecutiveEmptyRows} consecutive empty rows`
+            `DocuCheck: Stopping scan - found ${consecutiveEmptyRows} consecutive empty rows`
           );
           break;
         }
@@ -337,10 +587,9 @@ class DocumentCatalog {
           continue;
         }
 
-        // Enhanced logging to debug what we're finding
         if (artifactName) {
           console.log(
-            `Flash: Found artifact: "${artifactName}" - isDocument: ${this.isDocumentRow(
+            `DocuCheck: Found artifact: "${artifactName}" - isDocument: ${this.isDocumentRow(
               artifactName
             )}, isImage: ${this.isImageRow(artifactName)}`
           );
@@ -361,17 +610,19 @@ class DocumentCatalog {
           this.documents.set(docId, document);
           foundCount++;
           console.log(
-            `Flash: Cataloged ${foundCount}: Row ${rowIndex} - ${artifactName} (${document.date})`
+            `DocuCheck: Cataloged ${foundCount}: Row ${rowIndex} - ${artifactName} (${document.date})`
           );
         }
       } catch (error) {
-        console.error(`Flash: Error cataloging row ${rowIndex}:`, error);
+        console.error(`DocuCheck: Error cataloging row ${rowIndex}:`, error);
       }
 
       rowIndex++;
     }
 
-    console.log(`Flash: Scan complete. Found ${foundCount} unique documents`);
+    console.log(
+      `DocuCheck: Scan complete. Found ${foundCount} unique documents`
+    );
     return foundCount;
   }
 
@@ -395,7 +646,7 @@ class DocumentCatalog {
         }
       }
 
-      // Also try header cell patterns (from content (1).txt)
+      // Also try header cell patterns
       const headerCellXPathPatterns = [
         "/html/body/div[1]/div/div[2]/div/div/main/div/div/div/div[2]/div/div[2]/div/div/div/div/div/div/div[2]/div[2]/div/div/div/div[1]/div/div/div/div/div/div[1]/div/div/div[2]/div/div[1]/table/tbody/tr[$ROW]/th/div",
         "/html/body/div[2]/div/div[2]/div/div/main/div/div/div/div[2]/div/div[2]/div/div/div/div/div/div/div[2]/div[2]/div/div/div/div[1]/div/div/div/div/div/div[1]/div/div/div[2]/div/div[1]/table/tbody/tr[$ROW]/th/div",
@@ -451,33 +702,34 @@ class DocumentCatalog {
     const processedDocuments = new Set();
 
     console.log(
-      `Flash: Filtering documents - Filter type: ${filterType || "All"}`
+      `DocuCheck: Filtering documents - Filter type: ${filterType || "All"}`
     );
-    console.log(`Flash: Total documents in catalog: ${this.documents.size}`);
+    console.log(
+      `DocuCheck: Total documents in catalog: ${this.documents.size}`
+    );
 
     for (const [docId, doc] of this.documents) {
       console.log(
-        `Flash: Evaluating document: ${doc.artifactName}, isDocument: ${doc.isDocument}, filterType: ${filterType}`
+        `DocuCheck: Evaluating document: ${doc.artifactName}, isDocument: ${doc.isDocument}, filterType: ${filterType}`
       );
 
       if (this.currentSessionProcessed.has(docId)) {
         console.log(
-          `Flash: Skipping ${doc.artifactName} - already processed in current session`
+          `DocuCheck: Skipping ${doc.artifactName} - already processed in current session`
         );
         continue;
       }
 
       if (processedDocuments.has(docId)) {
         console.log(
-          `Flash: Skipping ${doc.artifactName} - already in processing queue`
+          `DocuCheck: Skipping ${doc.artifactName} - already in processing queue`
         );
         continue;
       }
 
-      // FIXED: Proper document filtering logic from content (1).txt
       if (filterType === "documents" && !doc.isDocument) {
         console.log(
-          `Flash: Skipping ${
+          `DocuCheck: Skipping ${
             doc.artifactName
           } - not a document type (artifact: "${
             doc.artifactName
@@ -487,19 +739,21 @@ class DocumentCatalog {
       }
 
       if (filterType === "images" && !doc.isImage) {
-        console.log(`Flash: Skipping ${doc.artifactName} - not an image type`);
+        console.log(
+          `DocuCheck: Skipping ${doc.artifactName} - not an image type`
+        );
         continue;
       }
 
       if (!doc.artifactName && !doc.date) {
         console.log(
-          `Flash: Skipping document with ID ${docId} - no valid content`
+          `DocuCheck: Skipping document with ID ${docId} - no valid content`
         );
         continue;
       }
 
       console.log(
-        `Flash: ✅ Queuing ${doc.artifactName || "Unknown"} for processing`
+        `DocuCheck: ✅ Queuing ${doc.artifactName || "Unknown"} for processing`
       );
       toProcess.push(doc);
       processedDocuments.add(docId);
@@ -508,23 +762,23 @@ class DocumentCatalog {
     toProcess.sort((a, b) => a.rowIndex - b.rowIndex);
 
     console.log(
-      `Flash: ${toProcess.length} unique documents queued for processing`
+      `DocuCheck: ${toProcess.length} unique documents queued for processing`
     );
     return toProcess;
   }
 
   markAsProcessedInSession(docId, rowIndex) {
     this.currentSessionProcessed.add(docId);
-    console.log(`Flash: Marked document as processed in session: ${docId}`);
+    console.log(`DocuCheck: Marked document as processed in session: ${docId}`);
   }
 
   resetCurrentSession() {
-    console.log("Flash: Resetting session");
+    console.log("DocuCheck: Resetting session");
     this.currentSessionProcessed.clear();
   }
 }
 
-// Document processor class
+// Enhanced Document Processor class - now searches dynamic field tables instead of PDFs
 class DocumentProcessor {
   constructor(catalog, ui) {
     this.catalog = catalog;
@@ -533,20 +787,22 @@ class DocumentProcessor {
     this.currentQueue = [];
     this.currentIndex = 0;
     this.processedCount = 0;
+    this.foundCount = 0;
   }
 
   async startProcessing(filterType = null, modelNumber = null) {
     if (this.isProcessing) {
-      console.log("Flash: Processing already in progress");
+      console.log("DocuCheck: Processing already in progress");
       return;
     }
 
-    console.log("Flash: Starting processing session");
+    console.log("DocuCheck: Starting processing session");
 
     this.catalog.resetCurrentSession();
 
     this.isProcessing = true;
     this.processedCount = 0;
+    this.foundCount = 0;
     this.currentIndex = 0;
     this.modelNumber = modelNumber;
 
@@ -563,7 +819,7 @@ class DocumentProcessor {
       const documentCount = this.catalog.scanAllDocuments();
 
       if (documentCount === 0) {
-        console.log("Flash: No documents found");
+        console.log("DocuCheck: No documents found");
         this.resetUI();
         return;
       }
@@ -571,18 +827,18 @@ class DocumentProcessor {
       this.currentQueue = this.catalog.getDocumentsToProcess(filterType);
 
       if (this.currentQueue.length === 0) {
-        console.log("Flash: No documents to process after filtering");
+        console.log("DocuCheck: No documents to process after filtering");
         this.resetUI();
         return;
       }
 
       console.log(
-        `Flash: Processing queue has ${this.currentQueue.length} unique documents`
+        `DocuCheck: Processing queue has ${this.currentQueue.length} unique documents`
       );
 
       await this.processQueue();
     } catch (error) {
-      console.error("Flash: Error in processing:", error);
+      console.error("DocuCheck: Error in processing:", error);
       this.resetUI();
     }
   }
@@ -594,10 +850,10 @@ class DocumentProcessor {
         return;
       }
 
-      console.log("Flash: Switching to Media History view");
+      console.log("DocuCheck: Switching to Media History view");
       const mediaHistoryTab = getMediaHistoryTabElement();
       if (!mediaHistoryTab) {
-        console.log("Flash: Media History tab not found");
+        console.log("DocuCheck: Media History tab not found");
         resolve(false);
         return;
       }
@@ -606,10 +862,10 @@ class DocumentProcessor {
 
       setTimeout(() => {
         if (this.isInMediaHistoryView()) {
-          console.log("Flash: Successfully switched to Media History view");
+          console.log("DocuCheck: Successfully switched to Media History view");
           resolve(true);
         } else {
-          console.log("Flash: Failed to switch to Media History view");
+          console.log("DocuCheck: Failed to switch to Media History view");
           resolve(false);
         }
       }, config.tabLoadWaitDelay);
@@ -623,7 +879,7 @@ class DocumentProcessor {
 
   async processQueue() {
     console.log(
-      `Flash: Starting to process ${this.currentQueue.length} unique documents`
+      `DocuCheck: Starting to process ${this.currentQueue.length} unique documents`
     );
 
     while (this.currentIndex < this.currentQueue.length && this.isProcessing) {
@@ -635,7 +891,7 @@ class DocumentProcessor {
       }
 
       console.log(
-        `Flash: Processing ${this.currentIndex + 1}/${
+        `DocuCheck: Processing ${this.currentIndex + 1}/${
           this.currentQueue.length
         }: Row ${document.rowIndex} - ${document.artifactName} (${
           document.date
@@ -646,19 +902,29 @@ class DocumentProcessor {
         this.processedCount + 1
       }/${this.currentQueue.length}`;
 
-      const success = await this.processDocument(document);
+      const result = await this.processDocument(document);
 
-      if (success) {
+      if (result.processed) {
         this.catalog.markAsProcessedInSession(document.id, document.rowIndex);
         this.processedCount++;
-        console.log(
-          `Flash: Successfully processed document ${this.currentIndex + 1}: ${
-            document.artifactName
-          }`
-        );
+
+        if (result.found) {
+          this.foundCount++;
+          console.log(
+            `DocuCheck: ✅ Found keyword in document ${
+              this.currentIndex + 1
+            }: ${document.artifactName}`
+          );
+        } else {
+          console.log(
+            `DocuCheck: ❌ Keyword not found in document ${
+              this.currentIndex + 1
+            }: ${document.artifactName}`
+          );
+        }
       } else {
         console.log(
-          `Flash: Failed to process document ${this.currentIndex + 1}: ${
+          `DocuCheck: Failed to process document ${this.currentIndex + 1}: ${
             document.artifactName
           }`
         );
@@ -672,7 +938,7 @@ class DocumentProcessor {
     }
 
     console.log(
-      `Flash: Processing complete. Processed ${this.processedCount}/${this.currentQueue.length} unique documents`
+      `DocuCheck: Processing complete. Processed ${this.processedCount}/${this.currentQueue.length} documents, found keyword in ${this.foundCount} documents`
     );
     this.resetUI();
   }
@@ -687,38 +953,32 @@ class DocumentProcessor {
         rowElement.classList.add("flash-highlight");
       }
 
-      console.log(`Flash: Clicking checkbox for row ${document.rowIndex}`);
+      console.log(`DocuCheck: Clicking checkbox for row ${document.rowIndex}`);
       const checkboxSuccess = await this.clickCheckboxRobust(document.checkbox);
       if (!checkboxSuccess) {
         if (rowElement) rowElement.classList.remove("flash-highlight");
-        return false;
+        return { processed: false, found: false };
       }
 
       const isSelected = await this.validateCheckboxSelected(document.checkbox);
       if (!isSelected) {
         if (rowElement) rowElement.classList.remove("flash-highlight");
-        return false;
+        return { processed: false, found: false };
       }
 
-      const openButton = getOpenButtonElement();
-      if (!openButton) {
-        if (rowElement) rowElement.classList.remove("flash-highlight");
-        return false;
-      }
-
-      const openButtonAvailable = await this.validateOpenButtonAvailable(
-        openButton
+      console.log(
+        `DocuCheck: Searching for keyword "${this.modelNumber}" in dynamic field table for row ${document.rowIndex}`
       );
-      if (!openButtonAvailable) {
-        if (rowElement) rowElement.classList.remove("flash-highlight");
-        return false;
+
+      if (this.ui?.resultMessage) {
+        this.ui.resultMessage.textContent = `🔍 Searching field table...`;
       }
 
-      console.log(`Flash: Clicking open button for row ${document.rowIndex}`);
-      const openSuccess = await this.clickOpenButtonRobust(
-        openButton,
-        this.modelNumber
-      );
+      // NEW: Search the dynamic field table instead of opening PDF
+      const searchResult =
+        await this.catalog.dynamicFieldScanner.scanDynamicFieldTable(
+          this.modelNumber
+        );
 
       if (rowElement) {
         setTimeout(() => {
@@ -726,10 +986,25 @@ class DocumentProcessor {
         }, 300);
       }
 
-      return openSuccess;
+      // Update UI based on search results
+      if (searchResult.found) {
+        const message = `✅ "${
+          this.modelNumber
+        }" found in fields: ${searchResult.matches
+          .map((m) => m.fieldName)
+          .join(", ")}`;
+        console.log(message);
+        if (this.ui?.resultMessage) this.ui.resultMessage.textContent = message;
+        return { processed: true, found: true, matches: searchResult.matches };
+      } else {
+        const message = `❌ "${this.modelNumber}" not found in field table`;
+        console.log(message);
+        if (this.ui?.resultMessage) this.ui.resultMessage.textContent = message;
+        return { processed: true, found: false, matches: [] };
+      }
     } catch (err) {
       console.error(`Error in document processing`, err);
-      return false;
+      return { processed: false, found: false };
     }
   }
 
@@ -760,7 +1035,7 @@ class DocumentProcessor {
         return true;
       } catch (error) {
         console.log(
-          `Flash: Checkbox click attempt ${attempt + 1} failed:`,
+          `DocuCheck: Checkbox click attempt ${attempt + 1} failed:`,
           error
         );
         if (attempt < config.maxRetries - 1) {
@@ -782,107 +1057,11 @@ class DocumentProcessor {
         checkbox.parentElement?.classList.contains("checked") ||
         checkbox.closest("label")?.classList.contains("checked");
 
-      console.log(`Flash: Checkbox validation result: ${isSelected}`);
+      console.log(`DocuCheck: Checkbox validation result: ${isSelected}`);
       return isSelected;
     } catch (error) {
-      console.log(`Flash: Checkbox validation error:`, error);
+      console.log(`DocuCheck: Checkbox validation error:`, error);
       return false;
-    }
-  }
-
-  async validateOpenButtonAvailable(openButton) {
-    await this.sleep(config.validationDelay);
-
-    try {
-      const isAvailable =
-        openButton &&
-        !openButton.disabled &&
-        openButton.style.display !== "none" &&
-        !openButton.classList.contains("disabled") &&
-        openButton.offsetParent !== null;
-
-      console.log(`Flash: Open button validation result: ${isAvailable}`);
-      return isAvailable;
-    } catch (error) {
-      console.log(`Flash: Open button validation error:`, error);
-      return false;
-    }
-  }
-
-  async clickOpenButtonRobust(openButton, modelNumber) {
-    try {
-      const pdfUrl = openButton.href;
-
-      if (!pdfUrl) {
-        console.log("Flash: No href found on open button.");
-        return false;
-      }
-
-      console.log(`Flash: Processing PDF from URL: ${pdfUrl}`);
-
-      if (this.ui?.resultMessage) {
-        this.ui.resultMessage.textContent = `🔍 Processing PDF...`;
-      }
-
-      // Send request to background script to fetch and process PDF
-      const result = await new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          reject(new Error("Processing timeout"));
-        }, 30000); // 30 second timeout
-
-        chrome.runtime.sendMessage(
-          {
-            action: "processPDFInBackground",
-            pdfUrl: pdfUrl,
-            keyword: modelNumber,
-          },
-          (response) => {
-            clearTimeout(timeout);
-
-            if (chrome.runtime.lastError) {
-              reject(chrome.runtime.lastError);
-              return;
-            }
-
-            if (!response) {
-              reject(new Error("No response from background script"));
-              return;
-            }
-
-            resolve(response);
-          }
-        );
-      });
-
-      console.log("Flash: Background processing result:", result);
-
-      if (result.found === true) {
-        const message = `✅ "${modelNumber}" found in PDF`;
-        console.log(message);
-        if (this.ui?.resultMessage) this.ui.resultMessage.textContent = message;
-        return true;
-      } else if (result.found === false && !result.error) {
-        const message = `❌ "${modelNumber}" not found in PDF`;
-        console.log(message);
-        if (this.ui?.resultMessage) this.ui.resultMessage.textContent = message;
-        return false;
-      } else {
-        // Error case
-        console.log("Flash: Error processing PDF:", result.error);
-        window.open(pdfUrl, "_blank");
-        const message = `📄 ${result.error} - opened for manual check`;
-        if (this.ui?.resultMessage) this.ui.resultMessage.textContent = message;
-        return true;
-      }
-    } catch (e) {
-      console.error("Flash: Error processing PDF:", e);
-
-      // Fallback: open PDF manually
-      window.open(openButton.href, "_blank");
-      if (this.ui?.resultMessage) {
-        this.ui.resultMessage.textContent = `📄 ${e.message} - opened for manual check`;
-      }
-      return true;
     }
   }
 
@@ -890,6 +1069,17 @@ class DocumentProcessor {
     this.isProcessing = false;
     this.ui.documentsButton.classList.remove("processing");
     this.ui.documentsButton.textContent = "📄 Documents";
+
+    // Show final summary
+    if (this.processedCount > 0) {
+      const finalMessage = `✅ Complete: ${this.foundCount}/${this.processedCount} documents contained "${this.modelNumber}"`;
+      if (this.ui?.resultMessage) {
+        this.ui.resultMessage.textContent = finalMessage;
+        setTimeout(() => {
+          if (this.ui?.resultMessage) this.ui.resultMessage.textContent = "";
+        }, 5000);
+      }
+    }
 
     document.querySelectorAll(".flash-highlight").forEach((el) => {
       el.classList.remove("flash-highlight");
@@ -915,7 +1105,7 @@ function createFixedUI() {
     flashContainer.id = "flash-extension-container";
     flashContainer.innerHTML = `
       <div class="flash-fixed-toolbar">
-        <button class="flash-button" id="flash-documents-btn">📄 Documents</button>
+        <button class="flash-button" id="flash-documents-btn">📄 Search Fields</button>
         <div class="flash-result" id="flash-result-message"></div>
       </div>
     `;
@@ -939,7 +1129,7 @@ function createFixedUI() {
         display: flex !important;
         align-items: center !important;
         gap: 12px !important;
-        min-width: 200px !important;
+        min-width: 220px !important;
       }
 
       .flash-button {
@@ -971,7 +1161,7 @@ function createFixedUI() {
         color: white !important;
         font-size: 13px !important;
         font-weight: 500 !important;
-        max-width: 200px !important;
+        max-width: 250px !important;
         overflow: hidden !important;
         text-overflow: ellipsis !important;
         white-space: nowrap !important;
@@ -991,7 +1181,7 @@ function createFixedUI() {
     document.head.appendChild(style);
     document.body.appendChild(flashContainer);
 
-    console.log("Flash: Fixed UI added to top left");
+    console.log("DocuCheck: Fixed UI added to top left");
 
     return {
       container: flashContainer,
@@ -1000,7 +1190,7 @@ function createFixedUI() {
       resultMessage: document.getElementById("flash-result-message"),
     };
   } catch (error) {
-    console.error("Flash: Error creating fixed UI:", error);
+    console.error("DocuCheck: Error creating fixed UI:", error);
     return null;
   }
 }
@@ -1027,7 +1217,7 @@ async function initialize() {
 
     const ui = createFixedUI();
     if (!ui) {
-      console.log("Flash: UI creation failed");
+      console.log("DocuCheck: UI creation failed");
       return;
     }
 
@@ -1046,9 +1236,16 @@ async function initialize() {
 
         // Step 3: Fetch the model number
         const modelNumber = getValueByLabel("Model Number");
-        console.log("Flash: Model Number:", modelNumber);
+        console.log("DocuCheck: Model Number:", modelNumber);
 
-        // Step 4: Start document processing with proper filtering
+        if (!modelNumber) {
+          if (ui.resultMessage) {
+            ui.resultMessage.textContent = "⚠️ No model number found";
+          }
+          return;
+        }
+
+        // Step 4: Start document processing with field table searching
         if (!documentProcessor.isProcessing) {
           documentProcessor.startProcessing("documents", modelNumber);
         }
@@ -1056,11 +1253,11 @@ async function initialize() {
     }
 
     console.log(
-      "Flash: Simplified extension initialized successfully with fixed UI and proper document filtering"
+      "DocuCheck: Enhanced extension initialized successfully with checkbox + dynamic field table search"
     );
     return ui;
   } catch (error) {
-    console.error("Flash: Error during initialization:", error);
+    console.error("DocuCheck: Error during initialization:", error);
   }
 }
 
@@ -1077,7 +1274,7 @@ window.addEventListener("load", () => {
   setTimeout(() => {
     const flashUI = document.getElementById("flash-extension-container");
     if (!flashUI) {
-      console.log("Flash: UI not found after page load, initializing...");
+      console.log("DocuCheck: UI not found after page load, initializing...");
       initialize();
     }
   }, 1500);
