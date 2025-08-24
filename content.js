@@ -437,7 +437,6 @@ class DynamicFieldTableScanner {
   sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
-}
 
   scanWithDynamicXPathPatterns() {
     try {
@@ -1119,92 +1118,96 @@ class DocumentProcessor {
   }
 
 async processDocument(document) {
-    try {
-      document.checkbox.scrollIntoView({ behavior: "smooth", block: "center" });
-      await this.sleep(config.domSettleDelay);
+  try {
+    document.checkbox.scrollIntoView({ behavior: "smooth", block: "center" });
+    await this.sleep(config.domSettleDelay);
 
-      const rowElement = document.checkbox.closest("tr");
-      if (rowElement) {
-        rowElement.classList.add("flash-highlight");
-      }
+    const rowElement = document.checkbox.closest("tr");
+    if (rowElement) {
+      rowElement.classList.add("flash-highlight");
+    }
 
-      console.log(`DocuCheck: Clicking checkbox/radio for row ${document.rowIndex}`);
-      const checkboxSuccess = await this.clickCheckboxRobust(document.checkbox);
-      if (!checkboxSuccess) {
-        if (rowElement) rowElement.classList.remove("flash-highlight");
-        return { processed: false, found: false };
-      }
-
-      const isSelected = await this.validateCheckboxSelected(document.checkbox);
-      if (!isSelected) {
-        if (rowElement) rowElement.classList.remove("flash-highlight");
-        return { processed: false, found: false };
-      }
-
-      console.log(`DocuCheck: Searching for attributes and keyword "${this.modelNumber}" in dynamic field table for row ${document.rowIndex}`);
-      
-      if (this.ui?.resultMessage) {
-        this.ui.resultMessage.textContent = `🔍 Searching attribute table...`;
-      }
-
-      // Search the dynamic field table
-      const searchResult = await this.catalog.dynamicFieldScanner.scanDynamicFieldTable(this.modelNumber);
-
-      if (rowElement) {
-        setTimeout(() => {
-          rowElement.classList.remove("flash-highlight");
-        }, 300);
-      }
-
-      // Update UI based on search results
-      if (searchResult.found) {
-        const message = `✅ "${this.modelNumber}" found in attributes: ${searchResult.matches.map(m => m.fieldName).join(', ')}`;
-        console.log(message);
-        if (this.ui?.resultMessage) this.ui.resultMessage.textContent = message;
-      } else {
-        const message = `❌ "${this.modelNumber}" not found in attribute table`;
-        console.log(message);
-        if (this.ui?.resultMessage) this.ui.resultMessage.textContent = message;
-      }
-
-      // Safe extraction with null checks
-      const extracted = searchResult.extractedAttributes || {};
-      console.log("\n🎯 EXTRACTED TARGET ATTRIBUTES:");
-      
-      // Show the attributes that were actually found
-      if (Object.keys(extracted).length > 0) {
-        Object.keys(extracted).forEach(key => {
-          const attr = extracted[key];
-          if (attr && attr.value !== undefined) {
-            console.log(`${key}: "${attr.value}" (confidence: ${attr.confidence || 'N/A'})`);
-          }
-        });
-      } else {
-        console.log("No target attributes found");
-      }
-      
-      // Safe specific lookups with proper null checking
-      console.log("\n🔍 SPECIFIC LOOKUPS:");
-      console.log("ASIN_MODEL_NUMBER:", extracted.ASIN_MODEL_NUMBER?.value ?? "Not found");
-      console.log("ASIN_PART_NUMBER:", extracted.ASIN_PART_NUMBER?.value ?? "Not found");
-      console.log("CLIENT_SPECIFIED_AGE:", extracted.CLIENT_SPECIFIED_AGE?.value ?? "Not found");
-      console.log("DOC_TYPE:", extracted.DOC_TYPE?.value ?? "Not found");
-      console.log("MODEL_NUMBER:", extracted.MODEL_NUMBER?.value ?? "Not found");
-      console.log("PART_NUMBER:", extracted.PART_NUMBER?.value ?? "Not found");
-
-      return { 
-        processed: true, 
-        found: searchResult.found, 
-        matches: searchResult.matches || [],
-        extractedAttributes: extracted
-      };
-
-    } catch (err) {
-      console.error(`Error in document processing:`, err);
-      console.error(`Stack trace:`, err.stack);
+    console.log(`DocuCheck: Processing row ${document.rowIndex} - ${document.artifactName}`);
+    
+    const checkboxSuccess = await this.clickCheckboxRobust(document.checkbox);
+    if (!checkboxSuccess) {
+      if (rowElement) rowElement.classList.remove("flash-highlight");
       return { processed: false, found: false };
     }
+
+    const isSelected = await this.validateCheckboxSelected(document.checkbox);
+    if (!isSelected) {
+      if (rowElement) rowElement.classList.remove("flash-highlight");
+      return { processed: false, found: false };
+    }
+
+    if (this.ui?.resultMessage) {
+      this.ui.resultMessage.textContent = `🔍 Extracting attributes...`;
+    }
+
+    // Search the dynamic field table
+    const searchResult = await this.catalog.dynamicFieldScanner.scanDynamicFieldTable(this.modelNumber);
+
+    if (rowElement) {
+      setTimeout(() => {
+        rowElement.classList.remove("flash-highlight");
+      }, 300);
+    }
+
+    // Update UI based on search results
+    if (searchResult.found) {
+      const message = `✅ Found "${this.modelNumber}" in document`;
+      console.log(message);
+      if (this.ui?.resultMessage) this.ui.resultMessage.textContent = message;
+    } else {
+      const message = `❌ "${this.modelNumber}" not found`;
+      console.log(message);
+      if (this.ui?.resultMessage) this.ui.resultMessage.textContent = message;
+    }
+
+    // Clean extraction logging - only show found attributes
+    const extracted = searchResult.extractedAttributes || {};
+    console.log(`\n📋 EXTRACTED ATTRIBUTES for ${document.artifactName}:`);
+    
+    let foundAnyAttributes = false;
+    
+    // Only log attributes that were actually found
+    if (extracted.ASIN_MODEL_NUMBER?.value) {
+      console.log(`MODEL_NUMBER: ${extracted.ASIN_MODEL_NUMBER.value} (${extracted.ASIN_MODEL_NUMBER.confidence})`);
+      foundAnyAttributes = true;
+    }
+    
+    if (extracted.ASIN_PART_NUMBER?.value) {
+      console.log(`PART_NUMBER: ${extracted.ASIN_PART_NUMBER.value} (${extracted.ASIN_PART_NUMBER.confidence})`);
+      foundAnyAttributes = true;
+    }
+    
+    if (extracted.CLIENT_SPECIFIED_AGE?.value) {
+      console.log(`AGE_RANGE: ${extracted.CLIENT_SPECIFIED_AGE.value} (${extracted.CLIENT_SPECIFIED_AGE.confidence})`);
+      foundAnyAttributes = true;
+    }
+    
+    if (extracted.DOC_TYPE?.value) {
+      console.log(`DOC_TYPE: ${extracted.DOC_TYPE.value} (${extracted.DOC_TYPE.confidence})`);
+      foundAnyAttributes = true;
+    }
+    
+    if (!foundAnyAttributes) {
+      console.log("No key attributes found in this document");
+    }
+
+    return { 
+      processed: true, 
+      found: searchResult.found, 
+      matches: searchResult.matches || [],
+      extractedAttributes: extracted
+    };
+
+  } catch (err) {
+    console.error(`DocuCheck: Error processing document:`, err);
+    return { processed: false, found: false };
   }
+}
 
   async clickCheckboxRobust(checkbox) {
     for (let attempt = 0; attempt < config.maxRetries; attempt++) {
