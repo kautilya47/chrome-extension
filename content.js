@@ -208,62 +208,236 @@ function getMediaHistoryTabElement() {
 class DynamicFieldTableScanner {
   constructor() {
     this.fieldData = new Map();
-    this.targetAttributes = ['MODEL_NUMBER', 'PART_NUMBER', 'DOC_TYPE', 'ASIN_MODEL_NUMBER', 'ASIN_PART_NUMBER'];
+    this.targetAttributes = [
+      'ASIN_MODEL_NUMBER', 
+      'ASIN_PART_NUMBER', 
+      'CLIENT_SPECIFIED_AGE',
+      'DOC_TYPE',
+      'MODEL_NUMBER',
+      'PART_NUMBER'
+    ];
   }
 
   // Wait for and scan the field table that appears after checkbox click
-  async scanDynamicFieldTable(
-    keyword,
-    maxWaitTime = config.dynamicTableWaitTime
-  ) {
+  async scanDynamicFieldTable(keyword, maxWaitTime = config.dynamicTableWaitTime) {
     console.log("DocuCheck: Waiting for dynamic field table to appear...");
     this.fieldData.clear();
 
     const startTime = Date.now();
     let tableFound = false;
+    let attemptCount = 0;
 
-    // Wait for table to appear with periodic checks
     while (Date.now() - startTime < maxWaitTime && !tableFound) {
-      // Method 1: Try specific XPath patterns for the dynamic table
-      tableFound = this.scanWithDynamicXPathPatterns();
-
-      // Method 2: Try generic table selectors if XPath patterns don't work
-      if (!tableFound) {
-        tableFound = this.scanWithGenericSelectors();
-      }
-
-      // Method 3: Look for recently added DOM elements with field patterns
-      if (!tableFound) {
-        tableFound = this.scanForNewFieldValuePatterns();
-      }
-
-      if (!tableFound) {
-        await this.sleep(200); // Wait 200ms before next check
+      attemptCount++;
+      console.log(`DocuCheck: Search attempt ${attemptCount}...`);
+      
+      tableFound = this.scanForAttributeTable();
+      
+      if (!tableFound && this.fieldData.size === 0) {
+        console.log(`DocuCheck: No attribute table found in attempt ${attemptCount}, waiting 200ms...`);
+        await this.sleep(200);
+      } else {
+        tableFound = true;
       }
     }
 
-    if (tableFound) {
-      console.log(
-        `DocuCheck: Found dynamic table with ${this.fieldData.size} field-value pairs`
-      );
-      this.logFoundFields();
+    console.log(`DocuCheck: Scan complete. Found ${this.fieldData.size} total attributes`);
+    
+    // DEBUG: Show all found attributes
+    console.log("=== ALL FOUND ATTRIBUTES ===");
+    for (const [key, value] of this.fieldData) {
+      console.log(`Key: "${key}" -> Value: "${value.value}" (${value.confidence})`);
+    }
+    console.log("=== END ALL ATTRIBUTES ===");
 
-      // Search for the keyword in the found fields
+    if (tableFound || this.fieldData.size > 0) {
       const matches = this.findMatchingFields(keyword);
+      const extractedAttributes = this.extractTargetAttributes();
+      
       return {
         found: matches.length > 0,
         matches: matches,
         fieldData: this.fieldData,
+        extractedAttributes: extractedAttributes
       };
     } else {
-      console.log("DocuCheck: Dynamic field table not found within timeout");
+      console.log(`DocuCheck: No attributes found within ${maxWaitTime}ms`);
       return {
         found: false,
         matches: [],
         fieldData: this.fieldData,
+        extractedAttributes: {}
       };
     }
   }
+
+  scanForAttributeTable() {
+    try {
+      let foundAny = false;
+      const tables = document.querySelectorAll('table');
+      
+      console.log(`DocuCheck: Scanning ${tables.length} tables on page`);
+      
+      for (let tableIndex = 0; tableIndex < tables.length; tableIndex++) {
+        const table = tables[tableIndex];
+        const headerRow = table.querySelector('tr');
+        
+        if (headerRow) {
+          const headers = Array.from(headerRow.querySelectorAll('th, td')).map(cell => cell.textContent.trim());
+          
+          console.log(`Table ${tableIndex + 1} headers:`, headers);
+          
+          // Check if this matches our expected structure
+          if (headers.length >= 4 && 
+              (headers.includes('Attribute') && headers.includes('Answer')) ||
+              (headers.includes('Question') && headers.includes('Confidence'))) {
+            
+            console.log(`DocuCheck: ✅ Table ${tableIndex + 1} matches our structure!`);
+            
+            const rows = table.querySelectorAll('tbody tr');
+            console.log(`DocuCheck: Processing ${rows.length} rows from table ${tableIndex + 1}`);
+            
+            rows.forEach((row, rowIndex) => {
+              const cells = row.querySelectorAll('td');
+              
+              if (cells.length >= 3) {
+                const cell0 = cells[0] ? cells[0].textContent.trim() : '';
+                const cell1 = cells[1] ? cells[1].textContent.trim() : '';
+                const cell2 = cells[2] ? cells[2].textContent.trim() : '';
+                const cell3 = cells[3] ? cells[3].textContent.trim() : '';
+                
+                console.log(`Row ${rowIndex + 1}: [${cell0}] [${cell1}] [${cell2}] [${cell3}]`);
+                
+                // Try different column mappings based on your debug data
+                let attribute, answer, confidence;
+                
+                // From your debug: Row 1: (4) ['', 'ASIN_MODEL_NUMBER', 'unknown', '']
+                // This suggests: cell[1] = attribute, cell[2] = answer, cell[3] = confidence
+                if (cell1 && cell1 !== 'Question' && cell1 !== '') {
+                  attribute = cell1;
+                  answer = cell2;
+                  confidence = cell3;
+                  
+                  console.log(`Found attribute: "${attribute}" = "${answer}" (${confidence})`);
+                  
+                  this.fieldData.set(attribute, {
+                    value: answer,
+                    confidence: confidence,
+                    attribute: attribute
+                  });
+                  
+                  foundAny = true;
+                }
+              }
+            });
+          } else {
+            console.log(`Table ${tableIndex + 1} does not match our structure`);
+          }
+        }
+      }
+      
+      return foundAny;
+    } catch (error) {
+      console.log("DocuCheck: Error scanning for attribute table:", error);
+      return false;
+    }
+  }
+
+  extractTargetAttributes() {
+    const extracted = {};
+    
+    console.log("=== EXTRACTING TARGET ATTRIBUTES ===");
+    console.log("Target attributes to find:", this.targetAttributes);
+    console.log("Available attributes:", Array.from(this.fieldData.keys()));
+    
+    for (const targetAttr of this.targetAttributes) {
+      console.log(`\n--- Looking for: ${targetAttr} ---`);
+      
+      // First try exact match
+      if (this.fieldData.has(targetAttr)) {
+        const fieldData = this.fieldData.get(targetAttr);
+        extracted[targetAttr] = {
+          attribute: fieldData.attribute,
+          value: fieldData.value,
+          confidence: fieldData.confidence,
+          matchedField: targetAttr
+        };
+        console.log(`✅ EXACT MATCH: ${targetAttr} = "${fieldData.value}"`);
+      } else {
+        console.log(`❌ No exact match for: ${targetAttr}`);
+        
+        // Try partial match
+        const lowerTarget = targetAttr.toLowerCase();
+        let found = false;
+        
+        for (const [fieldName, fieldData] of this.fieldData) {
+          const lowerFieldName = fieldName.toLowerCase();
+          
+          console.log(`  Checking: "${fieldName}" vs "${targetAttr}"`);
+          console.log(`  Lower: "${lowerFieldName}" contains "${lowerTarget}"? ${lowerFieldName.includes(lowerTarget)}`);
+          console.log(`  Lower: "${lowerTarget}" contains "${lowerFieldName}"? ${lowerTarget.includes(lowerFieldName)}`);
+          
+          if (lowerFieldName.includes(lowerTarget) || lowerTarget.includes(lowerFieldName)) {
+            extracted[targetAttr] = {
+              attribute: fieldData.attribute,
+              value: fieldData.value,
+              confidence: fieldData.confidence,
+              matchedField: fieldName
+            };
+            console.log(`✅ PARTIAL MATCH: ${targetAttr} matched with "${fieldName}" = "${fieldData.value}"`);
+            found = true;
+            break;
+          }
+        }
+        
+        if (!found) {
+          console.log(`❌ NO MATCH found for: ${targetAttr}`);
+        }
+      }
+    }
+    
+    console.log("=== EXTRACTION COMPLETE ===");
+    console.log("Extracted:", Object.keys(extracted));
+    
+    return extracted;
+  }
+
+  findMatchingFields(keyword) {
+    const matches = [];
+    if (!keyword) return matches;
+    
+    const keywordLower = keyword.toLowerCase();
+
+    for (const [fieldName, fieldData] of this.fieldData) {
+      if (fieldData.value.toLowerCase().includes(keywordLower)) {
+        matches.push({
+          fieldName: fieldData.attribute,
+          fieldValue: fieldData.value,
+          confidence: fieldData.confidence,
+          matchType: 'value'
+        });
+      }
+      if (fieldName.toLowerCase().includes(keywordLower)) {
+        matches.push({
+          fieldName: fieldData.attribute,
+          fieldValue: fieldData.value,
+          confidence: fieldData.confidence,
+          matchType: 'name'
+        });
+      }
+    }
+
+    return matches;
+  }
+
+  logFoundFields() {
+    // This method is called but we're doing the logging in scanDynamicFieldTable now
+  }
+
+  sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+}
 
   scanWithDynamicXPathPatterns() {
     try {
