@@ -993,24 +993,41 @@ async processDocument(document) {
         if (this.ui?.resultMessage) this.ui.resultMessage.textContent = message;
       }
 
-      // Log the extracted target attributes regardless of keyword match
-      const extracted = searchResult.extractedAttributes;
+      // Safe extraction with null checks
+      const extracted = searchResult.extractedAttributes || {};
       console.log("\n🎯 EXTRACTED TARGET ATTRIBUTES:");
-      console.log("MODEL_NUMBER:", extracted.MODEL_NUMBER?.value || "Not found");
-      console.log("PART_NUMBER:", extracted.PART_NUMBER?.value || "Not found");
-      console.log("DOC_TYPE:", extracted.DOC_TYPE?.value || "Not found");
-      console.log("ASIN_MODEL_NUMBER:", extracted.ASIN_MODEL_NUMBER?.value || "Not found");
-      console.log("ASIN_PART_NUMBER:", extracted.ASIN_PART_NUMBER?.value || "Not found");
+      
+      // Show the attributes that were actually found
+      if (Object.keys(extracted).length > 0) {
+        Object.keys(extracted).forEach(key => {
+          const attr = extracted[key];
+          if (attr && attr.value !== undefined) {
+            console.log(`${key}: "${attr.value}" (confidence: ${attr.confidence || 'N/A'})`);
+          }
+        });
+      } else {
+        console.log("No target attributes found");
+      }
+      
+      // Safe specific lookups with proper null checking
+      console.log("\n🔍 SPECIFIC LOOKUPS:");
+      console.log("ASIN_MODEL_NUMBER:", extracted.ASIN_MODEL_NUMBER?.value ?? "Not found");
+      console.log("ASIN_PART_NUMBER:", extracted.ASIN_PART_NUMBER?.value ?? "Not found");
+      console.log("CLIENT_SPECIFIED_AGE:", extracted.CLIENT_SPECIFIED_AGE?.value ?? "Not found");
+      console.log("DOC_TYPE:", extracted.DOC_TYPE?.value ?? "Not found");
+      console.log("MODEL_NUMBER:", extracted.MODEL_NUMBER?.value ?? "Not found");
+      console.log("PART_NUMBER:", extracted.PART_NUMBER?.value ?? "Not found");
 
       return { 
         processed: true, 
         found: searchResult.found, 
-        matches: searchResult.matches,
+        matches: searchResult.matches || [],
         extractedAttributes: extracted
       };
 
     } catch (err) {
-      console.error(`Error in document processing`, err);
+      console.error(`Error in document processing:`, err);
+      console.error(`Stack trace:`, err.stack);
       return { processed: false, found: false };
     }
   }
