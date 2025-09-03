@@ -706,6 +706,60 @@ class DocumentCatalog {
 
 // Enhanced Document Processor class - now searches dynamic field tables instead of PDFs
 class DocumentProcessor {
+  async startProcessing(filterType = null, modelNumber = null) {
+    if (this.isProcessing) {
+      console.log("DocuCheck: Processing already in progress");
+      return;
+    }
+
+    console.log("DocuCheck: Starting processing session");
+
+    this.catalog.resetCurrentSession();
+    this.isProcessing = true;
+    this.processedCount = 0;
+    this.foundCount = 0;
+    this.currentIndex = 0;
+    this.modelNumber = modelNumber;
+
+    this.ui.documentsButton.classList.add("processing");
+    this.ui.documentsButton.textContent = "Processing...";
+
+    try {
+      // Ensure Media History view is loaded (if needed)
+      if (typeof this.ensureMediaHistoryView === "function") {
+        if (!(await this.ensureMediaHistoryView())) {
+          this.resetUI();
+          return;
+        }
+      }
+
+      this.ui.documentsButton.textContent = "Scanning...";
+      const documentCount = this.catalog.scanAllDocuments();
+
+      if (documentCount === 0) {
+        console.log("DocuCheck: No documents found");
+        this.resetUI();
+        return;
+      }
+
+      this.currentQueue = this.catalog.getDocumentsToProcess(filterType);
+
+      if (this.currentQueue.length === 0) {
+        console.log("DocuCheck: No documents to process after filtering");
+        this.resetUI();
+        return;
+      }
+
+      console.log(
+        `DocuCheck: Processing queue has ${this.currentQueue.length} unique documents`
+      );
+
+      await this.processQueue();
+    } catch (error) {
+      console.error("DocuCheck: Error in processing:", error);
+      this.resetUI();
+    }
+  }
 
   async processQueue() {
     console.log(
