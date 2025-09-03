@@ -534,79 +534,60 @@ class DocumentTypeUIManager {
   }
 
   addDocumentTypeCard(docType, trNumber, status, additionalInfo = {}) {
-    try {
-      if (!this.uiContainer) {
-        console.log("DocuCheck: UI container not found, creating it...");
-        this.createDocumentTypeUI();
-      }
-
-      const grid = document.getElementById("flash-doctype-grid");
-      if (!grid) {
-        console.error("DocuCheck: Grid element not found");
-        return null;
-      }
-
-      // Generate unique ID for this card
-      const cardId = `doctype-${docType.replace(/\s+/g, '-')}-${Date.now()}`;
-      
-      const card = document.createElement("div");
-      card.className = `flash-doctype-card ${status === 'MATCH' ? 'match' : 'no-match'}`;
-      card.id = cardId;
-
-      card.innerHTML = `
-        <div class="flash-doctype-title">
-          <span>${docType || 'Unknown Document'}</span>
-          <span class="flash-status-badge ${status === 'MATCH' ? 'match' : 'no-match'}">${status}</span>
-        </div>
-        <div class="flash-doctype-details">
-          <div class="flash-detail-row">
-            <span class="flash-detail-label">TR Number:</span>
-            <span class="flash-detail-value">${trNumber || 'N/A'}</span>
-          </div>
-          ${additionalInfo.modelNumber ? `
-          <div class="flash-detail-row">
-            <span class="flash-detail-label">Model:</span>
-            <span class="flash-detail-value">${additionalInfo.modelNumber}</span>
-          </div>
-          ` : ''}
-          ${additionalInfo.partNumber ? `
-          <div class="flash-detail-row">
-            <span class="flash-detail-label">Part:</span>
-            <span class="flash-detail-value">${additionalInfo.partNumber}</span>
-          </div>
-          ` : ''}
-          ${additionalInfo.confidence ? `
-          <div class="flash-detail-row">
-            <span class="flash-detail-label">Confidence:</span>
-            <span class="flash-detail-value">${additionalInfo.confidence}</span>
-          </div>
-          ` : ''}
-          ${additionalInfo.artifactName ? `
-          <div class="flash-detail-row">
-            <span class="flash-detail-label">File:</span>
-            <span class="flash-detail-value">${additionalInfo.artifactName}</span>
-          </div>
-          ` : ''}
-        </div>
-      `;
-
-      grid.appendChild(card);
-
-      // Store document type info
-      this.documentTypes.set(cardId, {
-        docType,
-        trNumber,
-        status,
-        additionalInfo
-      });
-
-      console.log(`DocuCheck: Added document card for ${docType} with status ${status}`);
-      return cardId;
-    } catch (error) {
-      console.error("DocuCheck: Error adding document type card:", error);
-      return null;
+    if (!this.uiContainer) {
+      this.createDocumentTypeUI();
     }
-  } Store document type info
+
+    const grid = document.getElementById("flash-doctype-grid");
+    if (!grid) return;
+
+    // Generate unique ID for this card
+    const cardId = `doctype-${docType}-${Date.now()}`;
+    
+    const card = document.createElement("div");
+    card.className = `flash-doctype-card ${status === 'MATCH' ? 'match' : 'no-match'}`;
+    card.id = cardId;
+
+    card.innerHTML = `
+      <div class="flash-doctype-title">
+        <span>${docType || 'Unknown Document'}</span>
+        <span class="flash-status-badge ${status === 'MATCH' ? 'match' : 'no-match'}">${status}</span>
+      </div>
+      <div class="flash-doctype-details">
+        <div class="flash-detail-row">
+          <span class="flash-detail-label">TR Number:</span>
+          <span class="flash-detail-value">${trNumber || 'N/A'}</span>
+        </div>
+        ${additionalInfo.modelNumber ? `
+        <div class="flash-detail-row">
+          <span class="flash-detail-label">Model:</span>
+          <span class="flash-detail-value">${additionalInfo.modelNumber}</span>
+        </div>
+        ` : ''}
+        ${additionalInfo.partNumber ? `
+        <div class="flash-detail-row">
+          <span class="flash-detail-label">Part:</span>
+          <span class="flash-detail-value">${additionalInfo.partNumber}</span>
+        </div>
+        ` : ''}
+        ${additionalInfo.confidence ? `
+        <div class="flash-detail-row">
+          <span class="flash-detail-label">Confidence:</span>
+          <span class="flash-detail-value">${additionalInfo.confidence}</span>
+        </div>
+        ` : ''}
+        ${additionalInfo.artifactName ? `
+        <div class="flash-detail-row">
+          <span class="flash-detail-label">File:</span>
+          <span class="flash-detail-value">${additionalInfo.artifactName}</span>
+        </div>
+        ` : ''}
+      </div>
+    `;
+
+    grid.appendChild(card);
+
+    // Store document type info
     this.documentTypes.set(cardId, {
       docType,
       trNumber,
@@ -618,38 +599,19 @@ class DocumentTypeUIManager {
   }
 
   clearResults() {
-    try {
-      const grid = document.getElementById("flash-doctype-grid");
-      if (grid) {
-        grid.innerHTML = '';
-        console.log("DocuCheck: Cleared document type grid");
-      }
-      this.documentTypes.clear();
-      console.log("DocuCheck: Cleared document types map");
-    } catch (error) {
-      console.error("DocuCheck: Error clearing results:", error);
+    const grid = document.getElementById("flash-doctype-grid");
+    if (grid) {
+      grid.innerHTML = '';
     }
+    this.documentTypes.clear();
   }
 
   removeDocumentTypeUI() {
-    try {
-      if (this.uiContainer) {
-        this.uiContainer.remove();
-        this.uiContainer = null;
-        console.log("DocuCheck: Removed document type UI");
-      }
-      
-      // Remove styles
-      const existingStyles = document.getElementById("flash-doctype-styles");
-      if (existingStyles) {
-        existingStyles.remove();
-        console.log("DocuCheck: Removed document type styles");
-      }
-      
-      this.documentTypes.clear();
-    } catch (error) {
-      console.error("DocuCheck: Error removing document type UI:", error);
+    if (this.uiContainer) {
+      this.uiContainer.remove();
+      this.uiContainer = null;
     }
+    this.documentTypes.clear();
   }
 }
 
@@ -1273,7 +1235,7 @@ class DocumentProcessor {
 
       return { 
         processed: true, 
-        found: isMatch, 
+        found: searchResult.found, 
         matches: searchResult.matches || [],
         extractedAttributes: extracted
       };
