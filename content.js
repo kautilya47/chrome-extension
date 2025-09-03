@@ -148,6 +148,12 @@ function clean(str) {
   return str.replace(/\s+/g, " ").trim();
 }
 
+// Helper function to normalize strings for comparison
+function normalizeForComparison(str) {
+  if (!str) return "";
+  return str.toString().trim().toLowerCase().replace(/\s+/g, " ");
+}
+
 // Dynamic element resolution functions
 function getElementByXPathMultiPattern(xpathPatterns, rowIndex = null) {
   for (const pattern of xpathPatterns) {
@@ -184,7 +190,7 @@ function getMediaHistoryTabElement() {
   return getElementByXPathMultiPattern(config.mediaHistoryTabXPathPatterns);
 }
 
-// Enhanced Dynamic Field Table Scanner - Now includes PART_NUMBER
+// Enhanced Dynamic Field Table Scanner - Now includes PART_NUMBER and comparison logic
 class DynamicFieldTableScanner {
   constructor() {
     this.fieldData = new Map();
@@ -198,7 +204,7 @@ class DynamicFieldTableScanner {
     ];
   }
 
-  async scanDynamicFieldTable(searchKeywords = [], maxWaitTime = config.dynamicTableWaitTime) {
+  async scanDynamicFieldTable(searchModelNumber = null, searchPartNumber = null, maxWaitTime = config.dynamicTableWaitTime) {
     console.log("DocuCheck: Scanning for attribute table...");
     this.fieldData.clear();
 
@@ -220,14 +226,15 @@ class DynamicFieldTableScanner {
     if (tableFound || this.fieldData.size > 0) {
       console.log(`DocuCheck: Found ${this.fieldData.size} attributes in table`);
       
-      const matches = this.findMatchingFields(searchKeywords);
       const extractedAttributes = this.extractTargetAttributes();
+      const matchResult = this.compareAttributes(searchModelNumber, searchPartNumber, extractedAttributes);
       
       return {
-        found: matches.length > 0,
-        matches: matches,
+        found: matchResult.hasMatch,
+        matches: matchResult.matches,
         fieldData: this.fieldData,
-        extractedAttributes: extractedAttributes
+        extractedAttributes: extractedAttributes,
+        comparisonResult: matchResult
       };
     } else {
       console.log("DocuCheck: No attribute table found");
@@ -235,9 +242,115 @@ class DynamicFieldTableScanner {
         found: false,
         matches: [],
         fieldData: this.fieldData,
-        extractedAttributes: {}
+        extractedAttributes: {},
+        comparisonResult: { hasMatch: false, matches: [], details: [] }
       };
     }
+  }
+
+  compareAttributes(searchModelNumber, searchPartNumber, extractedAttributes) {
+    const matches = [];
+    const details = [];
+    let hasMatch = false;
+
+    console.log("\n🔍 COMPARING ATTRIBUTES:");
+    console.log(`Search Model Number: "${searchModelNumber}"`);
+    console.log(`Search Part Number: "${searchPartNumber}"`);
+
+    // Compare Model Number
+    if (searchModelNumber) {
+      const normalizedSearchModel = normalizeForComparison(searchModelNumber);
+      
+      // Check ASIN_MODEL_NUMBER first, then MODEL_NUMBER
+      const extractedModelNumber = extractedAttributes.ASIN_MODEL_NUMBER?.value || extractedAttributes.MODEL_NUMBER?.value;
+      
+      if (extractedModelNumber) {
+        const normalizedExtractedModel = normalizeForComparison(extractedModelNumber);
+        const modelMatch = normalizedSearchModel === normalizedExtractedModel;
+        
+        console.log(`Extracted Model Number: "${extractedModelNumber}"`);
+        console.log(`Model Number Match: ${modelMatch ? "✅ YES" : "❌ NO"}`);
+        
+        details.push({
+          type: 'MODEL_NUMBER',
+          searchValue: searchModelNumber,
+          extractedValue: extractedModelNumber,
+          match: modelMatch,
+          confidence: extractedAttributes.ASIN_MODEL_NUMBER?.confidence || extractedAttributes.MODEL_NUMBER?.confidence || 'N/A'
+        });
+
+        if (modelMatch) {
+          matches.push({
+            fieldName: 'MODEL_NUMBER',
+            fieldValue: extractedModelNumber,
+            confidence: extractedAttributes.ASIN_MODEL_NUMBER?.confidence || extractedAttributes.MODEL_NUMBER?.confidence || 'N/A',
+            matchType: 'exact',
+            matchedKeyword: searchModelNumber
+          });
+          hasMatch = true;
+        }
+      } else {
+        console.log("Extracted Model Number: Not found");
+        details.push({
+          type: 'MODEL_NUMBER',
+          searchValue: searchModelNumber,
+          extractedValue: null,
+          match: false,
+          confidence: 'N/A'
+        });
+      }
+    }
+
+    // Compare Part Number
+    if (searchPartNumber) {
+      const normalizedSearchPart = normalizeForComparison(searchPartNumber);
+      
+      const extractedPartNumber = extractedAttributes.PART_NUMBER?.value;
+      
+      if (extractedPartNumber) {
+        const normalizedExtractedPart = normalizeForComparison(extractedPartNumber);
+        const partMatch = normalizedSearchPart === normalizedExtractedPart;
+        
+        console.log(`Extracted Part Number: "${extractedPartNumber}"`);
+        console.log(`Part Number Match: ${partMatch ? "✅ YES" : "❌ NO"}`);
+        
+        details.push({
+          type: 'PART_NUMBER',
+          searchValue: searchPartNumber,
+          extractedValue: extractedPartNumber,
+          match: partMatch,
+          confidence: extractedAttributes.PART_NUMBER?.confidence || 'N/A'
+        });
+
+        if (partMatch) {
+          matches.push({
+            fieldName: 'PART_NUMBER',
+            fieldValue: extractedPartNumber,
+            confidence: extractedAttributes.PART_NUMBER?.confidence || 'N/A',
+            matchType: 'exact',
+            matchedKeyword: searchPartNumber
+          });
+          hasMatch = true;
+        }
+      } else {
+        console.log("Extracted Part Number: Not found");
+        details.push({
+          type: 'PART_NUMBER',
+          searchValue: searchPartNumber,
+          extractedValue: null,
+          match: false,
+          confidence: 'N/A'
+        });
+      }
+    }
+
+    console.log(`\n🎯 OVERALL MATCH RESULT: ${hasMatch ? "✅ MATCH FOUND" : "❌ NO MATCH"}`);
+
+    return {
+      hasMatch,
+      matches,
+      details
+    };
   }
 
   scanForAttributeTable() {
@@ -327,38 +440,6 @@ class DynamicFieldTableScanner {
     }
     
     return extracted;
-  }
-
-  findMatchingFields(searchKeywords) {
-    const matches = [];
-    if (!searchKeywords || searchKeywords.length === 0) return matches;
-    
-    for (const keyword of searchKeywords) {
-      const keywordLower = keyword.toLowerCase();
-
-      for (const [fieldName, fieldData] of this.fieldData) {
-        if (fieldData.value.toLowerCase().includes(keywordLower)) {
-          matches.push({
-            fieldName: fieldData.attribute,
-            fieldValue: fieldData.value,
-            confidence: fieldData.confidence,
-            matchType: 'value',
-            matchedKeyword: keyword
-          });
-        }
-        if (fieldName.toLowerCase().includes(keywordLower)) {
-          matches.push({
-            fieldName: fieldData.attribute,
-            fieldValue: fieldData.value,
-            confidence: fieldData.confidence,
-            matchType: 'name',
-            matchedKeyword: keyword
-          });
-        }
-      }
-    }
-
-    return matches;
   }
 
   sleep(ms) {
@@ -580,6 +661,12 @@ class DocumentTypeUIManager {
         <div class="flash-detail-row">
           <span class="flash-detail-label">File:</span>
           <span class="flash-detail-value">${additionalInfo.artifactName}</span>
+        </div>
+        ` : ''}
+        ${additionalInfo.matchDetails ? `
+        <div class="flash-detail-row">
+          <span class="flash-detail-label">Match Details:</span>
+          <span class="flash-detail-value">${additionalInfo.matchDetails}</span>
         </div>
         ` : ''}
       </div>
@@ -938,7 +1025,7 @@ class DocumentCatalog {
   }
 }
 
-// Enhanced Document Processor class - now searches dynamic field tables and creates UI cards
+// Enhanced Document Processor class - now uses exact comparison logic
 class DocumentProcessor {
   constructor(catalog, ui, docTypeUIManager) {
     this.catalog = catalog;
@@ -949,15 +1036,19 @@ class DocumentProcessor {
     this.currentIndex = 0;
     this.processedCount = 0;
     this.foundCount = 0;
+    this.searchModelNumber = null;
+    this.searchPartNumber = null;
   }
 
-  async startProcessing(filterType = null, searchKeywords = []) {
+  async startProcessing(filterType = null, searchModelNumber = null, searchPartNumber = null) {
     if (this.isProcessing) {
       console.log("DocuCheck: Processing already in progress");
       return;
     }
 
     console.log("DocuCheck: Starting processing session");
+    console.log(`Search Model Number: "${searchModelNumber}"`);
+    console.log(`Search Part Number: "${searchPartNumber}"`);
 
     this.catalog.resetCurrentSession();
 
@@ -965,7 +1056,8 @@ class DocumentProcessor {
     this.processedCount = 0;
     this.foundCount = 0;
     this.currentIndex = 0;
-    this.searchKeywords = searchKeywords;
+    this.searchModelNumber = searchModelNumber;
+    this.searchPartNumber = searchPartNumber;
 
     this.ui.documentsButton.classList.add("processing");
     this.ui.documentsButton.textContent = "Processing...";
@@ -1078,13 +1170,13 @@ class DocumentProcessor {
         if (result.found) {
           this.foundCount++;
           console.log(
-            `DocuCheck: ✅ Found keyword in document ${
+            `DocuCheck: ✅ Match found in document ${
               this.currentIndex + 1
             }: ${document.artifactName}`
           );
         } else {
           console.log(
-            `DocuCheck: ❌ Keyword not found in document ${
+            `DocuCheck: ❌ No match in document ${
               this.currentIndex + 1
             }: ${document.artifactName}`
           );
@@ -1105,7 +1197,7 @@ class DocumentProcessor {
     }
 
     console.log(
-      `DocuCheck: Processing complete. Processed ${this.processedCount}/${this.currentQueue.length} documents, found keyword in ${this.foundCount} documents`
+      `DocuCheck: Processing complete. Processed ${this.processedCount}/${this.currentQueue.length} documents, found matches in ${this.foundCount} documents`
     );
     this.resetUI();
   }
@@ -1119,7 +1211,7 @@ class DocumentProcessor {
     // Get TR_NUMBER
     const trNumber = extracted.TR_NUMBER?.value || 'N/A';
     
-    // Determine status
+    // Determine status based on actual comparison result
     const status = result.found ? 'MATCH' : 'NO MATCH';
     
     // Prepare additional info
@@ -1128,15 +1220,29 @@ class DocumentProcessor {
       confidence: extracted.DOC_TYPE?.confidence || 'N/A'
     };
 
-    // Add model number if available
-    const modelNumber = extracted.ASIN_MODEL_NUMBER?.value || extracted.MODEL_NUMBER?.value;
-    if (modelNumber) {
-      additionalInfo.modelNumber = modelNumber;
+    // Add extracted model number if available
+    const extractedModelNumber = extracted.ASIN_MODEL_NUMBER?.value || extracted.MODEL_NUMBER?.value;
+    if (extractedModelNumber) {
+      additionalInfo.modelNumber = extractedModelNumber;
     }
 
-    // Add part number if available
+    // Add extracted part number if available
     if (extracted.PART_NUMBER?.value) {
       additionalInfo.partNumber = extracted.PART_NUMBER.value;
+    }
+
+    // Add match details if available
+    if (result.comparisonResult && result.comparisonResult.details) {
+      const matchedItems = result.comparisonResult.details
+        .filter(detail => detail.match)
+        .map(detail => detail.type)
+        .join(', ');
+      
+      if (matchedItems) {
+        additionalInfo.matchDetails = `Matched: ${matchedItems}`;
+      } else {
+        additionalInfo.matchDetails = 'No exact matches found';
+      }
     }
 
     // Create the UI card
@@ -1173,11 +1279,14 @@ class DocumentProcessor {
       }
 
       if (this.ui?.resultMessage) {
-        this.ui.resultMessage.textContent = `🔍 Extracting attributes...`;
+        this.ui.resultMessage.textContent = `🔍 Comparing attributes...`;
       }
 
-      // Search the dynamic field table with multiple keywords
-      const searchResult = await this.catalog.dynamicFieldScanner.scanDynamicFieldTable(this.searchKeywords);
+      // Search the dynamic field table with comparison logic
+      const searchResult = await this.catalog.dynamicFieldScanner.scanDynamicFieldTable(
+        this.searchModelNumber, 
+        this.searchPartNumber
+      );
 
       if (rowElement) {
         setTimeout(() => {
@@ -1185,20 +1294,19 @@ class DocumentProcessor {
         }, 300);
       }
 
-      // Update UI based on search results
+      // Update UI based on comparison results
       if (searchResult.found) {
-        const matchedKeywords = searchResult.matches.map(m => m.matchedKeyword).join(', ');
-        const message = `✅ Found "${matchedKeywords}" in document`;
+        const matchedFields = searchResult.matches.map(m => m.fieldName).join(', ');
+        const message = `✅ Match found: ${matchedFields}`;
         console.log(message);
         if (this.ui?.resultMessage) this.ui.resultMessage.textContent = message;
       } else {
-        const keywordList = this.searchKeywords.join(' or ');
-        const message = `❌ "${keywordList}" not found`;
+        const message = `❌ No matching model/part numbers found`;
         console.log(message);
         if (this.ui?.resultMessage) this.ui.resultMessage.textContent = message;
       }
 
-      // Enhanced extraction logging - show DOC_TYPE, MODEL_NUMBER, PART_NUMBER, and TR_NUMBER
+      // Enhanced extraction logging
       const extracted = searchResult.extractedAttributes || {};
       console.log(`\n📋 EXTRACTED ATTRIBUTES for ${document.artifactName}:`);
       
@@ -1237,7 +1345,8 @@ class DocumentProcessor {
         processed: true, 
         found: searchResult.found, 
         matches: searchResult.matches || [],
-        extractedAttributes: extracted
+        extractedAttributes: extracted,
+        comparisonResult: searchResult.comparisonResult || null
       };
 
     } catch (err) {
@@ -1310,8 +1419,7 @@ class DocumentProcessor {
 
     // Show final summary
     if (this.processedCount > 0) {
-      const keywordList = this.searchKeywords.join(' or ');
-      const finalMessage = `✅ Complete: ${this.foundCount}/${this.processedCount} documents contained "${keywordList}"`;
+      const finalMessage = `✅ Complete: ${this.foundCount}/${this.processedCount} documents had matching model/part numbers`;
       if (this.ui?.resultMessage) {
         this.ui.resultMessage.textContent = finalMessage;
         setTimeout(() => {
@@ -1482,33 +1590,28 @@ async function initialize() {
         console.log("DocuCheck: Model Number:", modelNumber);
         console.log("DocuCheck: Part Number:", partNumber);
 
-        // Create search keywords array - include both model and part number
-        const searchKeywords = [];
-        if (modelNumber) searchKeywords.push(modelNumber);
-        if (partNumber) searchKeywords.push(partNumber);
-
-        if (searchKeywords.length === 0) {
+        if (!modelNumber && !partNumber) {
           if (ui.resultMessage) {
             ui.resultMessage.textContent = "⚠️ No model or part number found";
           }
           return;
         }
 
-        console.log("DocuCheck: Search Keywords:", searchKeywords);
+        console.log("DocuCheck: Will compare with extracted MODEL_NUMBER and PART_NUMBER");
 
-        // Step 4: Start document processing with field table searching
+        // Step 4: Start document processing with exact comparison logic
         if (!documentProcessor.isProcessing) {
           // Create the document type UI container
           docTypeUIManager.createDocumentTypeUI();
           
-          // Start processing
-          documentProcessor.startProcessing("documents", searchKeywords);
+          // Start processing with the extracted model and part numbers
+          documentProcessor.startProcessing("documents", modelNumber, partNumber);
         }
       });
     }
 
     console.log(
-      "DocuCheck: Enhanced extension initialized successfully with checkbox + dynamic field table search + PART_NUMBER + Document Type UI"
+      "DocuCheck: Enhanced extension initialized successfully with exact MODEL_NUMBER and PART_NUMBER comparison"
     );
     return ui;
   } catch (error) {
