@@ -1235,7 +1235,7 @@ class DocumentProcessor {
 
       return { 
         processed: true, 
-        found: searchResult.found, 
+        found: isMatch, 
         matches: searchResult.matches || [],
         extractedAttributes: extracted
       };
