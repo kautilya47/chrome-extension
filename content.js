@@ -1,4 +1,4 @@
-// Enhanced Content Script with Checkbox + Dynamic Field Table Search
+// Enhanced Content Script with Checkbox + Dynamic Field Table Search + PART_NUMBER + Doc Type UI
 console.log(
   "DocuCheck: Loading enhanced extension with checkbox field table search..."
 );
@@ -9,7 +9,7 @@ const config = {
     "/html/body/div[1]/div/div[2]/div/div/main/div/div/div/div[2]/div/div[2]/div/div/div/div/div/div/div[1]/div/ul/li[2]/div/button",
     "/html/body/div[2]/div/div[2]/div/div/main/div/div/div/div[2]/div/div[2]/div/div/div/div/div/div/div[1]/div/ul/li[2]/div/button",
     "/html/body/div[3]/div/div[2]/div/div/main/div/div/div/div[2]/div/div[2]/div/div/div/div/div/div/div[1]/div/ul/li[2]/div/button",
-    "/html/body/div[4]/div/div[2]/div/div/main/div/div/div/div[2]/div/div[2]/div/div/div/div/div/div/div[1]/div/ul/li[2]/div/button",
+    "/html/body/div[4]/div/div[2]/div/div/main/div/div/main/div/div/div/div[2]/div/div[2]/div/div/div/div/div/div/div[1]/div/ul/li[2]/div/button",
   ],
 
   checkboxXPathPatterns: [
@@ -184,21 +184,21 @@ function getMediaHistoryTabElement() {
   return getElementByXPathMultiPattern(config.mediaHistoryTabXPathPatterns);
 }
 
-// Simplified Dynamic Field Table Scanner - Only extracts DOC_TYPE and MODEL_NUMBER
+// Enhanced Dynamic Field Table Scanner - Now includes PART_NUMBER
 class DynamicFieldTableScanner {
   constructor() {
     this.fieldData = new Map();
-    // Only the two attributes you want
+    // Added PART_NUMBER to the target attributes
     this.targetAttributes = [
       'DOC_TYPE',
       'MODEL_NUMBER',
-      'ASIN_MODEL_NUMBER', // Keep this as fallback for MODEL_NUMBER
       'PART_NUMBER',
-      'TR_NUMBER'
+      'ASIN_MODEL_NUMBER', // Keep this as fallback for MODEL_NUMBER
+      'TR_NUMBER' // Adding TR_NUMBER as well
     ];
   }
 
-  async scanDynamicFieldTable(keyword, maxWaitTime = config.dynamicTableWaitTime) {
+  async scanDynamicFieldTable(searchKeywords = [], maxWaitTime = config.dynamicTableWaitTime) {
     console.log("DocuCheck: Scanning for attribute table...");
     this.fieldData.clear();
 
@@ -220,31 +220,12 @@ class DynamicFieldTableScanner {
     if (tableFound || this.fieldData.size > 0) {
       console.log(`DocuCheck: Found ${this.fieldData.size} attributes in table`);
       
-      const matches = this.findMatchingFields(keyword);
+      const matches = this.findMatchingFields(searchKeywords);
       const extractedAttributes = this.extractTargetAttributes();
-
-      // Also check PART_NUMBER for matches
-      let partNumberMatches = [];
-      if (keyword) {
-        for (const [fieldName, fieldData] of this.fieldData) {
-          if (fieldName.toLowerCase().includes('part_number') || fieldName.toLowerCase().includes('partnumber')) {
-            if (fieldData.value && fieldData.value.toLowerCase().includes(keyword.toLowerCase())) {
-              partNumberMatches.push({
-                fieldName: fieldData.attribute,
-                fieldValue: fieldData.value,
-                confidence: fieldData.confidence,
-                matchType: 'part_number'
-              });
-            }
-          }
-        }
-      }
-
-      const allMatches = matches.concat(partNumberMatches);
-
+      
       return {
-        found: allMatches.length > 0,
-        matches: allMatches,
+        found: matches.length > 0,
+        matches: matches,
         fieldData: this.fieldData,
         extractedAttributes: extractedAttributes
       };
@@ -348,28 +329,32 @@ class DynamicFieldTableScanner {
     return extracted;
   }
 
-  findMatchingFields(keyword) {
+  findMatchingFields(searchKeywords) {
     const matches = [];
-    if (!keyword) return matches;
+    if (!searchKeywords || searchKeywords.length === 0) return matches;
     
-    const keywordLower = keyword.toLowerCase();
+    for (const keyword of searchKeywords) {
+      const keywordLower = keyword.toLowerCase();
 
-    for (const [fieldName, fieldData] of this.fieldData) {
-      if (fieldData.value.toLowerCase().includes(keywordLower)) {
-        matches.push({
-          fieldName: fieldData.attribute,
-          fieldValue: fieldData.value,
-          confidence: fieldData.confidence,
-          matchType: 'value'
-        });
-      }
-      if (fieldName.toLowerCase().includes(keywordLower)) {
-        matches.push({
-          fieldName: fieldData.attribute,
-          fieldValue: fieldData.value,
-          confidence: fieldData.confidence,
-          matchType: 'name'
-        });
+      for (const [fieldName, fieldData] of this.fieldData) {
+        if (fieldData.value.toLowerCase().includes(keywordLower)) {
+          matches.push({
+            fieldName: fieldData.attribute,
+            fieldValue: fieldData.value,
+            confidence: fieldData.confidence,
+            matchType: 'value',
+            matchedKeyword: keyword
+          });
+        }
+        if (fieldName.toLowerCase().includes(keywordLower)) {
+          matches.push({
+            fieldName: fieldData.attribute,
+            fieldValue: fieldData.value,
+            confidence: fieldData.confidence,
+            matchType: 'name',
+            matchedKeyword: keyword
+          });
+        }
       }
     }
 
@@ -378,6 +363,255 @@ class DynamicFieldTableScanner {
 
   sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+}
+
+// Document Type UI Manager - Creates UI elements for each document type
+class DocumentTypeUIManager {
+  constructor() {
+    this.documentTypes = new Map();
+    this.uiContainer = null;
+  }
+
+  createDocumentTypeUI() {
+    // Remove existing UI if present
+    const existingUI = document.getElementById("flash-doctype-container");
+    if (existingUI) existingUI.remove();
+
+    // Create container for document type cards
+    this.uiContainer = document.createElement("div");
+    this.uiContainer.id = "flash-doctype-container";
+    this.uiContainer.innerHTML = `
+      <div class="flash-doctype-header">
+        <h3>Document Analysis Results</h3>
+        <button class="flash-clear-btn" id="flash-clear-results">Clear</button>
+      </div>
+      <div class="flash-doctype-grid" id="flash-doctype-grid">
+        <!-- Document type cards will be added here dynamically -->
+      </div>
+    `;
+
+    // Add styles for document type UI
+    const style = document.createElement("style");
+    style.textContent = `
+      #flash-doctype-container {
+        position: fixed !important;
+        top: 20px !important;
+        right: 20px !important;
+        z-index: 100001 !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+        max-width: 400px !important;
+        max-height: 80vh !important;
+        overflow-y: auto !important;
+        background: rgba(255, 255, 255, 0.95) !important;
+        border-radius: 12px !important;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15) !important;
+        backdrop-filter: blur(10px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.2) !important;
+      }
+
+      .flash-doctype-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+        color: white !important;
+        padding: 16px !important;
+        border-radius: 12px 12px 0 0 !important;
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+      }
+
+      .flash-doctype-header h3 {
+        margin: 0 !important;
+        font-size: 16px !important;
+        font-weight: 600 !important;
+      }
+
+      .flash-clear-btn {
+        background: rgba(255, 255, 255, 0.2) !important;
+        color: white !important;
+        border: 1px solid rgba(255, 255, 255, 0.3) !important;
+        border-radius: 6px !important;
+        padding: 6px 12px !important;
+        font-size: 12px !important;
+        cursor: pointer !important;
+        transition: all 0.2s ease !important;
+      }
+
+      .flash-clear-btn:hover {
+        background: rgba(255, 255, 255, 0.3) !important;
+      }
+
+      .flash-doctype-grid {
+        padding: 16px !important;
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 12px !important;
+      }
+
+      .flash-doctype-card {
+        background: white !important;
+        border: 2px solid #e5e7eb !important;
+        border-radius: 8px !important;
+        padding: 12px !important;
+        transition: all 0.3s ease !important;
+      }
+
+      .flash-doctype-card.match {
+        border-color: #10b981 !important;
+        background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%) !important;
+      }
+
+      .flash-doctype-card.no-match {
+        border-color: #ef4444 !important;
+        background: linear-gradient(135deg, #fef2f2 0%, #fefefe 100%) !important;
+      }
+
+      .flash-doctype-title {
+        font-weight: 600 !important;
+        font-size: 14px !important;
+        color: #374151 !important;
+        margin-bottom: 8px !important;
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+      }
+
+      .flash-status-badge {
+        padding: 4px 8px !important;
+        border-radius: 4px !important;
+        font-size: 11px !important;
+        font-weight: 500 !important;
+        text-transform: uppercase !important;
+      }
+
+      .flash-status-badge.match {
+        background: #10b981 !important;
+        color: white !important;
+      }
+
+      .flash-status-badge.no-match {
+        background: #ef4444 !important;
+        color: white !important;
+      }
+
+      .flash-doctype-details {
+        font-size: 12px !important;
+        color: #6b7280 !important;
+        line-height: 1.4 !important;
+      }
+
+      .flash-detail-row {
+        display: flex !important;
+        justify-content: space-between !important;
+        margin-bottom: 4px !important;
+      }
+
+      .flash-detail-label {
+        font-weight: 500 !important;
+      }
+
+      .flash-detail-value {
+        color: #374151 !important;
+        max-width: 200px !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        white-space: nowrap !important;
+      }
+    `;
+
+    document.head.appendChild(style);
+    document.body.appendChild(this.uiContainer);
+
+    // Add clear button event listener
+    const clearBtn = document.getElementById("flash-clear-results");
+    if (clearBtn) {
+      clearBtn.addEventListener("click", () => {
+        this.clearResults();
+      });
+    }
+
+    return this.uiContainer;
+  }
+
+  addDocumentTypeCard(docType, trNumber, status, additionalInfo = {}) {
+    if (!this.uiContainer) {
+      this.createDocumentTypeUI();
+    }
+
+    const grid = document.getElementById("flash-doctype-grid");
+    if (!grid) return;
+
+    // Generate unique ID for this card
+    const cardId = `doctype-${docType}-${Date.now()}`;
+    
+    const card = document.createElement("div");
+    card.className = `flash-doctype-card ${status === 'MATCH' ? 'match' : 'no-match'}`;
+    card.id = cardId;
+
+    card.innerHTML = `
+      <div class="flash-doctype-title">
+        <span>${docType || 'Unknown Document'}</span>
+        <span class="flash-status-badge ${status === 'MATCH' ? 'match' : 'no-match'}">${status}</span>
+      </div>
+      <div class="flash-doctype-details">
+        <div class="flash-detail-row">
+          <span class="flash-detail-label">TR Number:</span>
+          <span class="flash-detail-value">${trNumber || 'N/A'}</span>
+        </div>
+        ${additionalInfo.modelNumber ? `
+        <div class="flash-detail-row">
+          <span class="flash-detail-label">Model:</span>
+          <span class="flash-detail-value">${additionalInfo.modelNumber}</span>
+        </div>
+        ` : ''}
+        ${additionalInfo.partNumber ? `
+        <div class="flash-detail-row">
+          <span class="flash-detail-label">Part:</span>
+          <span class="flash-detail-value">${additionalInfo.partNumber}</span>
+        </div>
+        ` : ''}
+        ${additionalInfo.confidence ? `
+        <div class="flash-detail-row">
+          <span class="flash-detail-label">Confidence:</span>
+          <span class="flash-detail-value">${additionalInfo.confidence}</span>
+        </div>
+        ` : ''}
+        ${additionalInfo.artifactName ? `
+        <div class="flash-detail-row">
+          <span class="flash-detail-label">File:</span>
+          <span class="flash-detail-value">${additionalInfo.artifactName}</span>
+        </div>
+        ` : ''}
+      </div>
+    `;
+
+    grid.appendChild(card);
+
+    // Store document type info
+    this.documentTypes.set(cardId, {
+      docType,
+      trNumber,
+      status,
+      additionalInfo
+    });
+
+    return cardId;
+  }
+
+  clearResults() {
+    const grid = document.getElementById("flash-doctype-grid");
+    if (grid) {
+      grid.innerHTML = '';
+    }
+    this.documentTypes.clear();
+  }
+
+  removeDocumentTypeUI() {
+    if (this.uiContainer) {
+      this.uiContainer.remove();
+      this.uiContainer = null;
+    }
+    this.documentTypes.clear();
   }
 }
 
@@ -704,11 +938,12 @@ class DocumentCatalog {
   }
 }
 
-// Enhanced Document Processor class - now searches dynamic field tables instead of PDFs
+// Enhanced Document Processor class - now searches dynamic field tables and creates UI cards
 class DocumentProcessor {
-  constructor(catalog, ui) {
+  constructor(catalog, ui, docTypeUIManager) {
     this.catalog = catalog;
     this.ui = ui;
+    this.docTypeUIManager = docTypeUIManager;
     this.isProcessing = false;
     this.currentQueue = [];
     this.currentIndex = 0;
@@ -716,7 +951,7 @@ class DocumentProcessor {
     this.foundCount = 0;
   }
 
-  async startProcessing(filterType = null, modelNumber = null) {
+  async startProcessing(filterType = null, searchKeywords = []) {
     if (this.isProcessing) {
       console.log("DocuCheck: Processing already in progress");
       return;
@@ -724,29 +959,24 @@ class DocumentProcessor {
 
     console.log("DocuCheck: Starting processing session");
 
-    if (!this.catalog) {
-      console.error("DocuCheck: DocumentCatalog is undefined in DocumentProcessor");
-      this.resetUI();
-      return;
-    }
-
     this.catalog.resetCurrentSession();
+
     this.isProcessing = true;
     this.processedCount = 0;
     this.foundCount = 0;
     this.currentIndex = 0;
-    this.modelNumber = modelNumber;
+    this.searchKeywords = searchKeywords;
 
     this.ui.documentsButton.classList.add("processing");
     this.ui.documentsButton.textContent = "Processing...";
 
+    // Clear previous results
+    this.docTypeUIManager.clearResults();
+
     try {
-      // Ensure Media History view is loaded (if needed)
-      if (typeof this.ensureMediaHistoryView === "function") {
-        if (!(await this.ensureMediaHistoryView())) {
-          this.resetUI();
-          return;
-        }
+      if (!(await this.ensureMediaHistoryView())) {
+        this.resetUI();
+        return;
       }
 
       this.ui.documentsButton.textContent = "Scanning...";
@@ -775,6 +1005,40 @@ class DocumentProcessor {
       console.error("DocuCheck: Error in processing:", error);
       this.resetUI();
     }
+  }
+
+  async ensureMediaHistoryView() {
+    return new Promise((resolve) => {
+      if (this.isInMediaHistoryView()) {
+        resolve(true);
+        return;
+      }
+
+      console.log("DocuCheck: Switching to Media History view");
+      const mediaHistoryTab = getMediaHistoryTabElement();
+      if (!mediaHistoryTab) {
+        console.log("DocuCheck: Media History tab not found");
+        resolve(false);
+        return;
+      }
+
+      mediaHistoryTab.click();
+
+      setTimeout(() => {
+        if (this.isInMediaHistoryView()) {
+          console.log("DocuCheck: Successfully switched to Media History view");
+          resolve(true);
+        } else {
+          console.log("DocuCheck: Failed to switch to Media History view");
+          resolve(false);
+        }
+      }, config.tabLoadWaitDelay);
+    });
+  }
+
+  isInMediaHistoryView() {
+    const checkbox = getCheckboxElement(1);
+    return !!checkbox;
   }
 
   async processQueue() {
@@ -807,6 +1071,9 @@ class DocumentProcessor {
       if (result.processed) {
         this.catalog.markAsProcessedInSession(document.id, document.rowIndex);
         this.processedCount++;
+
+        // Create UI card for this document
+        this.createDocumentCard(document, result);
 
         if (result.found) {
           this.foundCount++;
@@ -843,6 +1110,44 @@ class DocumentProcessor {
     this.resetUI();
   }
 
+  createDocumentCard(document, result) {
+    const extracted = result.extractedAttributes || {};
+    
+    // Get DOC_TYPE
+    const docType = extracted.DOC_TYPE?.value || 'Unknown Document';
+    
+    // Get TR_NUMBER
+    const trNumber = extracted.TR_NUMBER?.value || 'N/A';
+    
+    // Determine status
+    const status = result.found ? 'MATCH' : 'NO MATCH';
+    
+    // Prepare additional info
+    const additionalInfo = {
+      artifactName: document.artifactName,
+      confidence: extracted.DOC_TYPE?.confidence || 'N/A'
+    };
+
+    // Add model number if available
+    const modelNumber = extracted.ASIN_MODEL_NUMBER?.value || extracted.MODEL_NUMBER?.value;
+    if (modelNumber) {
+      additionalInfo.modelNumber = modelNumber;
+    }
+
+    // Add part number if available
+    if (extracted.PART_NUMBER?.value) {
+      additionalInfo.partNumber = extracted.PART_NUMBER.value;
+    }
+
+    // Create the UI card
+    this.docTypeUIManager.addDocumentTypeCard(
+      docType,
+      trNumber,
+      status,
+      additionalInfo
+    );
+  }
+
   async processDocument(document) {
     try {
       document.checkbox.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -871,8 +1176,8 @@ class DocumentProcessor {
         this.ui.resultMessage.textContent = `🔍 Extracting attributes...`;
       }
 
-      // Search the dynamic field table
-      const searchResult = await this.catalog.dynamicFieldScanner.scanDynamicFieldTable(this.modelNumber);
+      // Search the dynamic field table with multiple keywords
+      const searchResult = await this.catalog.dynamicFieldScanner.scanDynamicFieldTable(this.searchKeywords);
 
       if (rowElement) {
         setTimeout(() => {
@@ -882,20 +1187,34 @@ class DocumentProcessor {
 
       // Update UI based on search results
       if (searchResult.found) {
-        const message = `✅ Found "${this.modelNumber}" in document`;
+        const matchedKeywords = searchResult.matches.map(m => m.matchedKeyword).join(', ');
+        const message = `✅ Found "${matchedKeywords}" in document`;
         console.log(message);
         if (this.ui?.resultMessage) this.ui.resultMessage.textContent = message;
       } else {
-        const message = `❌ "${this.modelNumber}" not found`;
+        const keywordList = this.searchKeywords.join(' or ');
+        const message = `❌ "${keywordList}" not found`;
         console.log(message);
         if (this.ui?.resultMessage) this.ui.resultMessage.textContent = message;
       }
 
-      // Simplified extraction logging - only show DOC_TYPE and MODEL_NUMBER
+      // Enhanced extraction logging - show DOC_TYPE, MODEL_NUMBER, PART_NUMBER, and TR_NUMBER
       const extracted = searchResult.extractedAttributes || {};
       console.log(`\n📋 EXTRACTED ATTRIBUTES for ${document.artifactName}:`);
       
       let foundAnyAttributes = false;
+      
+      // Check for DOC_TYPE
+      if (extracted.DOC_TYPE?.value) {
+        console.log(`DOC_TYPE: ${extracted.DOC_TYPE.value} (${extracted.DOC_TYPE.confidence || 'N/A'})`);
+        foundAnyAttributes = true;
+      }
+
+      // Check for TR_NUMBER
+      if (extracted.TR_NUMBER?.value) {
+        console.log(`TR_NUMBER: ${extracted.TR_NUMBER.value} (${extracted.TR_NUMBER.confidence || 'N/A'})`);
+        foundAnyAttributes = true;
+      }
       
       // Check for MODEL_NUMBER (try ASIN_MODEL_NUMBER first, then MODEL_NUMBER)
       const modelNumber = extracted.ASIN_MODEL_NUMBER?.value || extracted.MODEL_NUMBER?.value;
@@ -903,15 +1222,15 @@ class DocumentProcessor {
         console.log(`MODEL_NUMBER: ${modelNumber} (${extracted.ASIN_MODEL_NUMBER?.confidence || extracted.MODEL_NUMBER?.confidence || 'N/A'})`);
         foundAnyAttributes = true;
       }
-      
-      // Check for DOC_TYPE
-      if (extracted.DOC_TYPE?.value) {
-        console.log(`DOC_TYPE: ${extracted.DOC_TYPE.value} (${extracted.DOC_TYPE.confidence || 'N/A'})`);
+
+      // Check for PART_NUMBER
+      if (extracted.PART_NUMBER?.value) {
+        console.log(`PART_NUMBER: ${extracted.PART_NUMBER.value} (${extracted.PART_NUMBER.confidence || 'N/A'})`);
         foundAnyAttributes = true;
       }
       
       if (!foundAnyAttributes) {
-        console.log("No DOC_TYPE or MODEL_NUMBER found in this document");
+        console.log("No target attributes found in this document");
       }
 
       return { 
@@ -987,11 +1306,12 @@ class DocumentProcessor {
   resetUI() {
     this.isProcessing = false;
     this.ui.documentsButton.classList.remove("processing");
-    this.ui.documentsButton.textContent = "📄 Documents";
+    this.ui.documentsButton.textContent = "📄 Search Fields";
 
     // Show final summary
     if (this.processedCount > 0) {
-      const finalMessage = `✅ Complete: ${this.foundCount}/${this.processedCount} documents contained "${this.modelNumber}"`;
+      const keywordList = this.searchKeywords.join(' or ');
+      const finalMessage = `✅ Complete: ${this.foundCount}/${this.processedCount} documents contained "${keywordList}"`;
       if (this.ui?.resultMessage) {
         this.ui.resultMessage.textContent = finalMessage;
         setTimeout(() => {
@@ -1013,6 +1333,7 @@ class DocumentProcessor {
 // Global instances
 let documentCatalog = null;
 let documentProcessor = null;
+let docTypeUIManager = null;
 
 // Create fixed UI in top left
 function createFixedUI() {
@@ -1142,7 +1463,8 @@ async function initialize() {
 
     // Initialize global instances
     documentCatalog = new DocumentCatalog();
-    documentProcessor = new DocumentProcessor(documentCatalog, ui);
+    docTypeUIManager = new DocumentTypeUIManager();
+    documentProcessor = new DocumentProcessor(documentCatalog, ui, docTypeUIManager);
 
     // Button click handler
     if (ui.documentsButton) {
@@ -1153,26 +1475,40 @@ async function initialize() {
         // Step 2: Wait for tab content to load
         await new Promise((resolve) => setTimeout(resolve, 2000));
 
-        // Step 3: Fetch the model number
+        // Step 3: Fetch the model number and part number
         const modelNumber = getValueByLabel("Model Number");
+        const partNumber = getValueByLabel("Part Number");
+        
         console.log("DocuCheck: Model Number:", modelNumber);
+        console.log("DocuCheck: Part Number:", partNumber);
 
-        if (!modelNumber) {
+        // Create search keywords array - include both model and part number
+        const searchKeywords = [];
+        if (modelNumber) searchKeywords.push(modelNumber);
+        if (partNumber) searchKeywords.push(partNumber);
+
+        if (searchKeywords.length === 0) {
           if (ui.resultMessage) {
-            ui.resultMessage.textContent = "⚠️ No model number found";
+            ui.resultMessage.textContent = "⚠️ No model or part number found";
           }
           return;
         }
 
+        console.log("DocuCheck: Search Keywords:", searchKeywords);
+
         // Step 4: Start document processing with field table searching
         if (!documentProcessor.isProcessing) {
-          documentProcessor.startProcessing("documents", modelNumber);
+          // Create the document type UI container
+          docTypeUIManager.createDocumentTypeUI();
+          
+          // Start processing
+          documentProcessor.startProcessing("documents", searchKeywords);
         }
       });
     }
 
     console.log(
-      "DocuCheck: Enhanced extension initialized successfully with checkbox + dynamic field table search"
+      "DocuCheck: Enhanced extension initialized successfully with checkbox + dynamic field table search + PART_NUMBER + Document Type UI"
     );
     return ui;
   } catch (error) {
