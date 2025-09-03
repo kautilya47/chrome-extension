@@ -706,6 +706,16 @@ class DocumentCatalog {
 
 // Enhanced Document Processor class - now searches dynamic field tables instead of PDFs
 class DocumentProcessor {
+  constructor(catalog, ui) {
+    this.catalog = catalog;
+    this.ui = ui;
+    this.isProcessing = false;
+    this.currentQueue = [];
+    this.currentIndex = 0;
+    this.processedCount = 0;
+    this.foundCount = 0;
+  }
+
   async startProcessing(filterType = null, modelNumber = null) {
     if (this.isProcessing) {
       console.log("DocuCheck: Processing already in progress");
@@ -713,6 +723,12 @@ class DocumentProcessor {
     }
 
     console.log("DocuCheck: Starting processing session");
+
+    if (!this.catalog) {
+      console.error("DocuCheck: DocumentCatalog is undefined in DocumentProcessor");
+      this.resetUI();
+      return;
+    }
 
     this.catalog.resetCurrentSession();
     this.isProcessing = true;
