@@ -192,7 +192,9 @@ class DynamicFieldTableScanner {
     this.targetAttributes = [
       'DOC_TYPE',
       'MODEL_NUMBER',
-      'ASIN_MODEL_NUMBER' // Keep this as fallback for MODEL_NUMBER
+      'ASIN_MODEL_NUMBER', // Keep this as fallback for MODEL_NUMBER
+      'PART_NUMBER',
+      'TR_NUMBER'
     ];
   }
 
@@ -220,10 +222,29 @@ class DynamicFieldTableScanner {
       
       const matches = this.findMatchingFields(keyword);
       const extractedAttributes = this.extractTargetAttributes();
-      
+
+      // Also check PART_NUMBER for matches
+      let partNumberMatches = [];
+      if (keyword) {
+        for (const [fieldName, fieldData] of this.fieldData) {
+          if (fieldName.toLowerCase().includes('part_number') || fieldName.toLowerCase().includes('partnumber')) {
+            if (fieldData.value && fieldData.value.toLowerCase().includes(keyword.toLowerCase())) {
+              partNumberMatches.push({
+                fieldName: fieldData.attribute,
+                fieldValue: fieldData.value,
+                confidence: fieldData.confidence,
+                matchType: 'part_number'
+              });
+            }
+          }
+        }
+      }
+
+      const allMatches = matches.concat(partNumberMatches);
+
       return {
-        found: matches.length > 0,
-        matches: matches,
+        found: allMatches.length > 0,
+        matches: allMatches,
         fieldData: this.fieldData,
         extractedAttributes: extractedAttributes
       };
@@ -685,102 +706,6 @@ class DocumentCatalog {
 
 // Enhanced Document Processor class - now searches dynamic field tables instead of PDFs
 class DocumentProcessor {
-  constructor(catalog, ui) {
-    this.catalog = catalog;
-    this.ui = ui;
-    this.isProcessing = false;
-    this.currentQueue = [];
-    this.currentIndex = 0;
-    this.processedCount = 0;
-    this.foundCount = 0;
-  }
-
-  async startProcessing(filterType = null, modelNumber = null) {
-    if (this.isProcessing) {
-      console.log("DocuCheck: Processing already in progress");
-      return;
-    }
-
-    console.log("DocuCheck: Starting processing session");
-
-    this.catalog.resetCurrentSession();
-
-    this.isProcessing = true;
-    this.processedCount = 0;
-    this.foundCount = 0;
-    this.currentIndex = 0;
-    this.modelNumber = modelNumber;
-
-    this.ui.documentsButton.classList.add("processing");
-    this.ui.documentsButton.textContent = "Processing...";
-
-    try {
-      if (!(await this.ensureMediaHistoryView())) {
-        this.resetUI();
-        return;
-      }
-
-      this.ui.documentsButton.textContent = "Scanning...";
-      const documentCount = this.catalog.scanAllDocuments();
-
-      if (documentCount === 0) {
-        console.log("DocuCheck: No documents found");
-        this.resetUI();
-        return;
-      }
-
-      this.currentQueue = this.catalog.getDocumentsToProcess(filterType);
-
-      if (this.currentQueue.length === 0) {
-        console.log("DocuCheck: No documents to process after filtering");
-        this.resetUI();
-        return;
-      }
-
-      console.log(
-        `DocuCheck: Processing queue has ${this.currentQueue.length} unique documents`
-      );
-
-      await this.processQueue();
-    } catch (error) {
-      console.error("DocuCheck: Error in processing:", error);
-      this.resetUI();
-    }
-  }
-
-  async ensureMediaHistoryView() {
-    return new Promise((resolve) => {
-      if (this.isInMediaHistoryView()) {
-        resolve(true);
-        return;
-      }
-
-      console.log("DocuCheck: Switching to Media History view");
-      const mediaHistoryTab = getMediaHistoryTabElement();
-      if (!mediaHistoryTab) {
-        console.log("DocuCheck: Media History tab not found");
-        resolve(false);
-        return;
-      }
-
-      mediaHistoryTab.click();
-
-      setTimeout(() => {
-        if (this.isInMediaHistoryView()) {
-          console.log("DocuCheck: Successfully switched to Media History view");
-          resolve(true);
-        } else {
-          console.log("DocuCheck: Failed to switch to Media History view");
-          resolve(false);
-        }
-      }, config.tabLoadWaitDelay);
-    });
-  }
-
-  isInMediaHistoryView() {
-    const checkbox = getCheckboxElement(1);
-    return !!checkbox;
-  }
 
   async processQueue() {
     console.log(
