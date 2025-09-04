@@ -680,186 +680,199 @@ class DynamicFieldTableScanner {
     }
 
     // ENHANCED: Compare ALL search parameters with PRODUCT_IDENTIFIER (only for CPC documents)
-    if (isCPCDocument) {
-      const extractedProductIdentifier = extractedAttributes.PRODUCT_IDENTIFIER?.value;
-      
-      if (extractedProductIdentifier) {
-        // Split the comma-separated values and normalize each one
-        const productIdentifiers = extractedProductIdentifier
-          .split(',')
-          .map(id => normalizeForComparison(id.trim()))
-          .filter(id => id.length > 0);
+if (isCPCDocument) {
+  const extractedProductIdentifier = extractedAttributes.PRODUCT_IDENTIFIER?.value;
+  
+  if (extractedProductIdentifier) {
+    // Split by multiple delimiters (comma, period, space, underscore) and normalize each one
+    const productIdentifiers = extractedProductIdentifier
+      .split(/[,.\s_]+/)
+      .map(id => normalizeForComparison(id.trim()))
+      .filter(id => id.length > 0);
 
-        console.log(`Extracted Product Identifier: "${extractedProductIdentifier}"`);
-        console.log(`Product Identifiers (parsed): [${productIdentifiers.join(', ')}]`);
+    console.log(`Extracted Product Identifier: "${extractedProductIdentifier}"`);
+    console.log(`Product Identifiers (parsed): [${productIdentifiers.join(', ')}]`);
+    console.log(`Total parsed identifiers: ${productIdentifiers.length}`);
 
-        // Compare Model Number with PRODUCT_IDENTIFIER
-        if (searchModelNumber) {
-          const normalizedSearchModel = normalizeForComparison(searchModelNumber);
-          const modelMatch = productIdentifiers.includes(normalizedSearchModel);
+    // Compare Model Number with PRODUCT_IDENTIFIER
+    if (searchModelNumber) {
+      const normalizedSearchModel = normalizeForComparison(searchModelNumber);
+      const modelMatch = productIdentifiers.includes(normalizedSearchModel);
 
-          console.log(`Model Number vs Product Identifier Match: ${modelMatch ? "✅ YES" : "❌ NO"}`);
-
-          details.push({
-            type: "MODEL_vs_PRODUCT_IDENTIFIER",
-            searchValue: searchModelNumber,
-            extractedValue: extractedProductIdentifier,
-            match: modelMatch,
-            matchType: "inclusion",
-            confidence: extractedAttributes.PRODUCT_IDENTIFIER?.confidence || "N/A",
-          });
-
-          if (modelMatch) {
-            matches.push({
-              fieldName: "MODEL_vs_PRODUCT_IDENTIFIER",
-              fieldValue: extractedProductIdentifier,
-              confidence: extractedAttributes.PRODUCT_IDENTIFIER?.confidence || "N/A",
-              matchType: "inclusion",
-              matchedKeyword: searchModelNumber,
-            });
-            hasMatch = true;
-          }
-        }
-
-        // Compare Part Number with PRODUCT_IDENTIFIER
-        if (searchPartNumber) {
-          const normalizedSearchPart = normalizeForComparison(searchPartNumber);
-          const partMatch = productIdentifiers.includes(normalizedSearchPart);
-
-          console.log(`Part Number vs Product Identifier Match: ${partMatch ? "✅ YES" : "❌ NO"}`);
-
-          details.push({
-            type: "PART_vs_PRODUCT_IDENTIFIER",
-            searchValue: searchPartNumber,
-            extractedValue: extractedProductIdentifier,
-            match: partMatch,
-            matchType: "inclusion",
-            confidence: extractedAttributes.PRODUCT_IDENTIFIER?.confidence || "N/A",
-          });
-
-          if (partMatch) {
-            matches.push({
-              fieldName: "PART_vs_PRODUCT_IDENTIFIER",
-              fieldValue: extractedProductIdentifier,
-              confidence: extractedAttributes.PRODUCT_IDENTIFIER?.confidence || "N/A",
-              matchType: "inclusion",
-              matchedKeyword: searchPartNumber,
-            });
-            hasMatch = true;
-          }
-        }
-
-        // Compare Matching Part Number with PRODUCT_IDENTIFIER
-        if (searchMatchingPartNumber) {
-          const normalizedSearchMatchingPart = normalizeForComparison(searchMatchingPartNumber);
-          const matchingPartMatch = productIdentifiers.includes(normalizedSearchMatchingPart);
-
-          console.log(`Matching Part Number vs Product Identifier Match: ${matchingPartMatch ? "✅ YES" : "❌ NO"}`);
-
-          details.push({
-            type: "MATCHING_PART_vs_PRODUCT_IDENTIFIER",
-            searchValue: searchMatchingPartNumber,
-            extractedValue: extractedProductIdentifier,
-            match: matchingPartMatch,
-            matchType: "inclusion",
-            confidence: extractedAttributes.PRODUCT_IDENTIFIER?.confidence || "N/A",
-          });
-
-          if (matchingPartMatch) {
-            matches.push({
-              fieldName: "MATCHING_PART_vs_PRODUCT_IDENTIFIER",
-              fieldValue: extractedProductIdentifier,
-              confidence: extractedAttributes.PRODUCT_IDENTIFIER?.confidence || "N/A",
-              matchType: "inclusion",
-              matchedKeyword: searchMatchingPartNumber,
-            });
-            hasMatch = true;
-          }
-        }
-
-        // Compare ASIN with PRODUCT_IDENTIFIER
-        if (searchASIN) {
-          const normalizedSearchASIN = normalizeForComparison(searchASIN);
-          const asinMatch = productIdentifiers.includes(normalizedSearchASIN);
-
-          console.log(`ASIN vs Product Identifier Match: ${asinMatch ? "✅ YES" : "❌ NO"}`);
-
-          details.push({
-            type: "ASIN_vs_PRODUCT_IDENTIFIER",
-            searchValue: searchASIN,
-            extractedValue: extractedProductIdentifier,
-            match: asinMatch,
-            matchType: "inclusion",
-            confidence: extractedAttributes.PRODUCT_IDENTIFIER?.confidence || "N/A",
-          });
-
-          if (asinMatch) {
-            matches.push({
-              fieldName: "ASIN_vs_PRODUCT_IDENTIFIER",
-              fieldValue: extractedProductIdentifier,
-              confidence: extractedAttributes.PRODUCT_IDENTIFIER?.confidence || "N/A",
-              matchType: "inclusion",
-              matchedKeyword: searchASIN,
-            });
-            hasMatch = true;
-          }
-        }
-      } else {
-        console.log("Extracted Product Identifier: Not found");
-        
-        // Add details for each search parameter that was provided
-        if (searchModelNumber) {
-          details.push({
-            type: "MODEL_vs_PRODUCT_IDENTIFIER",
-            searchValue: searchModelNumber,
-            extractedValue: null,
-            match: false,
-            confidence: "N/A",
-          });
-        }
-        
-        if (searchPartNumber) {
-          details.push({
-            type: "PART_vs_PRODUCT_IDENTIFIER",
-            searchValue: searchPartNumber,
-            extractedValue: null,
-            match: false,
-            confidence: "N/A",
-          });
-        }
-        
-        if (searchMatchingPartNumber) {
-          details.push({
-            type: "MATCHING_PART_vs_PRODUCT_IDENTIFIER",
-            searchValue: searchMatchingPartNumber,
-            extractedValue: null,
-            match: false,
-            confidence: "N/A",
-          });
-        }
-        
-        if (searchASIN) {
-          details.push({
-            type: "ASIN_vs_PRODUCT_IDENTIFIER",
-            searchValue: searchASIN,
-            extractedValue: null,
-            match: false,
-            confidence: "N/A",
-          });
-        }
+      console.log(`Model Number vs Product Identifier Match: ${modelMatch ? "✅ YES" : "❌ NO"}`);
+      if (modelMatch) {
+        console.log(`  → Found "${searchModelNumber}" in PRODUCT_IDENTIFIER`);
       }
-    } else {
-      // Not a CPC document - log what comparisons were skipped
-      const skippedComparisons = [];
-      if (searchModelNumber) skippedComparisons.push("Model Number");
-      if (searchPartNumber) skippedComparisons.push("Part Number");
-      if (searchMatchingPartNumber) skippedComparisons.push("Matching Part Number");
-      if (searchASIN) skippedComparisons.push("ASIN");
-      
-      if (skippedComparisons.length > 0) {
-        console.log(`Product Identifier comparison skipped for [${skippedComparisons.join(', ')}] - not a CPC document`);
+
+      details.push({
+        type: "MODEL_vs_PRODUCT_IDENTIFIER",
+        searchValue: searchModelNumber,
+        extractedValue: extractedProductIdentifier,
+        match: modelMatch,
+        matchType: "inclusion",
+        confidence: extractedAttributes.PRODUCT_IDENTIFIER?.confidence || "N/A",
+      });
+
+      if (modelMatch) {
+        matches.push({
+          fieldName: "MODEL_vs_PRODUCT_IDENTIFIER",
+          fieldValue: extractedProductIdentifier,
+          confidence: extractedAttributes.PRODUCT_IDENTIFIER?.confidence || "N/A",
+          matchType: "inclusion",
+          matchedKeyword: searchModelNumber,
+        });
+        hasMatch = true;
       }
     }
+
+    // Compare Part Number with PRODUCT_IDENTIFIER
+    if (searchPartNumber) {
+      const normalizedSearchPart = normalizeForComparison(searchPartNumber);
+      const partMatch = productIdentifiers.includes(normalizedSearchPart);
+
+      console.log(`Part Number vs Product Identifier Match: ${partMatch ? "✅ YES" : "❌ NO"}`);
+      if (partMatch) {
+        console.log(`  → Found "${searchPartNumber}" in PRODUCT_IDENTIFIER`);
+      }
+
+      details.push({
+        type: "PART_vs_PRODUCT_IDENTIFIER",
+        searchValue: searchPartNumber,
+        extractedValue: extractedProductIdentifier,
+        match: partMatch,
+        matchType: "inclusion",
+        confidence: extractedAttributes.PRODUCT_IDENTIFIER?.confidence || "N/A",
+      });
+
+      if (partMatch) {
+        matches.push({
+          fieldName: "PART_vs_PRODUCT_IDENTIFIER",
+          fieldValue: extractedProductIdentifier,
+          confidence: extractedAttributes.PRODUCT_IDENTIFIER?.confidence || "N/A",
+          matchType: "inclusion",
+          matchedKeyword: searchPartNumber,
+        });
+        hasMatch = true;
+      }
+    }
+
+    // Compare Matching Part Number with PRODUCT_IDENTIFIER
+    if (searchMatchingPartNumber) {
+      const normalizedSearchMatchingPart = normalizeForComparison(searchMatchingPartNumber);
+      const matchingPartMatch = productIdentifiers.includes(normalizedSearchMatchingPart);
+
+      console.log(`Matching Part Number vs Product Identifier Match: ${matchingPartMatch ? "✅ YES" : "❌ NO"}`);
+      if (matchingPartMatch) {
+        console.log(`  → Found "${searchMatchingPartNumber}" in PRODUCT_IDENTIFIER`);
+      }
+
+      details.push({
+        type: "MATCHING_PART_vs_PRODUCT_IDENTIFIER",
+        searchValue: searchMatchingPartNumber,
+        extractedValue: extractedProductIdentifier,
+        match: matchingPartMatch,
+        matchType: "inclusion",
+        confidence: extractedAttributes.PRODUCT_IDENTIFIER?.confidence || "N/A",
+      });
+
+      if (matchingPartMatch) {
+        matches.push({
+          fieldName: "MATCHING_PART_vs_PRODUCT_IDENTIFIER",
+          fieldValue: extractedProductIdentifier,
+          confidence: extractedAttributes.PRODUCT_IDENTIFIER?.confidence || "N/A",
+          matchType: "inclusion",
+          matchedKeyword: searchMatchingPartNumber,
+        });
+        hasMatch = true;
+      }
+    }
+
+    // Compare ASIN with PRODUCT_IDENTIFIER
+    if (searchASIN) {
+      const normalizedSearchASIN = normalizeForComparison(searchASIN);
+      const asinMatch = productIdentifiers.includes(normalizedSearchASIN);
+
+      console.log(`ASIN vs Product Identifier Match: ${asinMatch ? "✅ YES" : "❌ NO"}`);
+      if (asinMatch) {
+        console.log(`  → Found "${searchASIN}" in PRODUCT_IDENTIFIER`);
+      }
+
+      details.push({
+        type: "ASIN_vs_PRODUCT_IDENTIFIER",
+        searchValue: searchASIN,
+        extractedValue: extractedProductIdentifier,
+        match: asinMatch,
+        matchType: "inclusion",
+        confidence: extractedAttributes.PRODUCT_IDENTIFIER?.confidence || "N/A",
+      });
+
+      if (asinMatch) {
+        matches.push({
+          fieldName: "ASIN_vs_PRODUCT_IDENTIFIER",
+          fieldValue: extractedProductIdentifier,
+          confidence: extractedAttributes.PRODUCT_IDENTIFIER?.confidence || "N/A",
+          matchType: "inclusion",
+          matchedKeyword: searchASIN,
+        });
+        hasMatch = true;
+      }
+    }
+  } else {
+    console.log("Extracted Product Identifier: Not found");
+    
+    // Add details for each search parameter that was provided
+    if (searchModelNumber) {
+      details.push({
+        type: "MODEL_vs_PRODUCT_IDENTIFIER",
+        searchValue: searchModelNumber,
+        extractedValue: null,
+        match: false,
+        confidence: "N/A",
+      });
+    }
+    
+    if (searchPartNumber) {
+      details.push({
+        type: "PART_vs_PRODUCT_IDENTIFIER",
+        searchValue: searchPartNumber,
+        extractedValue: null,
+        match: false,
+        confidence: "N/A",
+      });
+    }
+    
+    if (searchMatchingPartNumber) {
+      details.push({
+        type: "MATCHING_PART_vs_PRODUCT_IDENTIFIER",
+        searchValue: searchMatchingPartNumber,
+        extractedValue: null,
+        match: false,
+        confidence: "N/A",
+      });
+    }
+    
+    if (searchASIN) {
+      details.push({
+        type: "ASIN_vs_PRODUCT_IDENTIFIER",
+        searchValue: searchASIN,
+        extractedValue: null,
+        match: false,
+        confidence: "N/A",
+      });
+    }
+  }
+} else {
+  // Not a CPC document - log what comparisons were skipped
+  const skippedComparisons = [];
+  if (searchModelNumber) skippedComparisons.push("Model Number");
+  if (searchPartNumber) skippedComparisons.push("Part Number");
+  if (searchMatchingPartNumber) skippedComparisons.push("Matching Part Number");
+  if (searchASIN) skippedComparisons.push("ASIN");
+  
+  if (skippedComparisons.length > 0) {
+    console.log(`Product Identifier comparison skipped for [${skippedComparisons.join(', ')}] - not a CPC document`);
+  }
+}
 
     console.log(`\n🎯 OVERALL MATCH RESULT: ${hasMatch ? "✅ MATCH FOUND" : "❌ NO MATCH"}`);
 
