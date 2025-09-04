@@ -301,249 +301,256 @@ class DynamicFieldTableScanner {
 
   // ENHANCED: Updated compareAttributes method to include Matching Part Number and ASIN comparison
   compareAttributes(
-    searchModelNumber,
-    searchPartNumber,
-    searchMatchingPartNumber,
-    searchASIN,
-    extractedAttributes
-  ) {
-    const matches = [];
-    const details = [];
-    let hasMatch = false;
+  searchModelNumber,
+  searchPartNumber,
+  searchMatchingPartNumber,
+  searchASIN,
+  extractedAttributes
+) {
+  const matches = [];
+  const details = [];
+  let hasMatch = false;
 
-    console.log("\n🔍 COMPARING ATTRIBUTES:");
-    console.log(`Search Model Number: "${searchModelNumber}"`);
-    console.log(`Search Part Number: "${searchPartNumber}"`);
-    console.log(`Search Matching Part Number: "${searchMatchingPartNumber}"`); // ADDED
-    console.log(`Search ASIN: "${searchASIN}"`); // ADDED
+  console.log("\n🔍 COMPARING ATTRIBUTES:");
+  console.log(`Search Model Number: "${searchModelNumber}"`);
+  console.log(`Search Part Number: "${searchPartNumber}"`);
+  console.log(`Search Matching Part Number: "${searchMatchingPartNumber}"`);
+  console.log(`Search ASIN: "${searchASIN}"`);
 
-    // Determine if this is a CPC document
-    const docType = extractedAttributes.DOC_TYPE?.value;
-    const isCPCDocument =
-      docType && normalizeForComparison(docType).includes("cpc");
+  // Determine if this is a CPC document
+  const docType = extractedAttributes.DOC_TYPE?.value;
+  const isCPCDocument =
+    docType && normalizeForComparison(docType).includes("cpc");
 
-    console.log(`Document Type: "${docType}"`);
-    console.log(`Is CPC Document: ${isCPCDocument}`);
+  console.log(`Document Type: "${docType}"`);
+  console.log(`Is CPC Document: ${isCPCDocument}`);
 
-    // Compare Model Number
-    if (searchModelNumber) {
-      const normalizedSearchModel = normalizeForComparison(searchModelNumber);
+  // Compare Model Number
+  if (searchModelNumber) {
+    const normalizedSearchModel = normalizeForComparison(searchModelNumber);
 
-      // Check ASIN_MODEL_NUMBER first, then MODEL_NUMBER
-      const extractedModelNumber =
-        extractedAttributes.ASIN_MODEL_NUMBER?.value ||
-        extractedAttributes.MODEL_NUMBER?.value;
+    // Check ASIN_MODEL_NUMBER first, then MODEL_NUMBER
+    const extractedModelNumber =
+      extractedAttributes.ASIN_MODEL_NUMBER?.value ||
+      extractedAttributes.MODEL_NUMBER?.value;
 
-      if (extractedModelNumber) {
-        const normalizedExtractedModel =
-          normalizeForComparison(extractedModelNumber);
-        const modelMatch = normalizedSearchModel === normalizedExtractedModel;
+    if (extractedModelNumber) {
+      const normalizedExtractedModel =
+        normalizeForComparison(extractedModelNumber);
+      const modelMatch = normalizedSearchModel === normalizedExtractedModel;
 
-        console.log(`Extracted Model Number: "${extractedModelNumber}"`);
-        console.log(`Model Number Match: ${modelMatch ? "✅ YES" : "❌ NO"}`);
+      console.log(`Extracted Model Number: "${extractedModelNumber}"`);
+      console.log(`Model Number Match: ${modelMatch ? "✅ YES" : "❌ NO"}`);
 
-        details.push({
-          type: "MODEL_NUMBER",
-          searchValue: searchModelNumber,
-          extractedValue: extractedModelNumber,
-          match: modelMatch,
+      details.push({
+        type: "MODEL_NUMBER",
+        searchValue: searchModelNumber,
+        extractedValue: extractedModelNumber,
+        match: modelMatch,
+        confidence:
+          extractedAttributes.ASIN_MODEL_NUMBER?.confidence ||
+          extractedAttributes.MODEL_NUMBER?.confidence ||
+          "N/A",
+      });
+
+      if (modelMatch) {
+        matches.push({
+          fieldName: "MODEL_NUMBER",
+          fieldValue: extractedModelNumber,
           confidence:
             extractedAttributes.ASIN_MODEL_NUMBER?.confidence ||
             extractedAttributes.MODEL_NUMBER?.confidence ||
             "N/A",
+          matchType: "exact",
+          matchedKeyword: searchModelNumber,
         });
-
-        if (modelMatch) {
-          matches.push({
-            fieldName: "MODEL_NUMBER",
-            fieldValue: extractedModelNumber,
-            confidence:
-              extractedAttributes.ASIN_MODEL_NUMBER?.confidence ||
-              extractedAttributes.MODEL_NUMBER?.confidence ||
-              "N/A",
-            matchType: "exact",
-            matchedKeyword: searchModelNumber,
-          });
-          hasMatch = true;
-        }
-      } else {
-        console.log("Extracted Model Number: Not found");
-        details.push({
-          type: "MODEL_NUMBER",
-          searchValue: searchModelNumber,
-          extractedValue: null,
-          match: false,
-          confidence: "N/A",
-        });
+        hasMatch = true;
       }
+    } else {
+      console.log("Extracted Model Number: Not found");
+      details.push({
+        type: "MODEL_NUMBER",
+        searchValue: searchModelNumber,
+        extractedValue: null,
+        match: false,
+        confidence: "N/A",
+      });
     }
+  }
 
-    // Compare Part Number
-    if (searchPartNumber) {
-      const normalizedSearchPart = normalizeForComparison(searchPartNumber);
+  // Compare Part Number
+  if (searchPartNumber) {
+    const normalizedSearchPart = normalizeForComparison(searchPartNumber);
 
-      const extractedPartNumber = extractedAttributes.PART_NUMBER?.value;
+    const extractedPartNumber = extractedAttributes.PART_NUMBER?.value;
 
-      if (extractedPartNumber) {
-        const normalizedExtractedPart =
-          normalizeForComparison(extractedPartNumber);
-        const partMatch = normalizedSearchPart === normalizedExtractedPart;
+    if (extractedPartNumber) {
+      const normalizedExtractedPart =
+        normalizeForComparison(extractedPartNumber);
+      const partMatch = normalizedSearchPart === normalizedExtractedPart;
 
-        console.log(`Extracted Part Number: "${extractedPartNumber}"`);
-        console.log(`Part Number Match: ${partMatch ? "✅ YES" : "❌ NO"}`);
+      console.log(`Extracted Part Number: "${extractedPartNumber}"`);
+      console.log(`Part Number Match: ${partMatch ? "✅ YES" : "❌ NO"}`);
 
-        details.push({
-          type: "PART_NUMBER",
-          searchValue: searchPartNumber,
-          extractedValue: extractedPartNumber,
-          match: partMatch,
+      details.push({
+        type: "PART_NUMBER",
+        searchValue: searchPartNumber,
+        extractedValue: extractedPartNumber,
+        match: partMatch,
+        confidence: extractedAttributes.PART_NUMBER?.confidence || "N/A",
+      });
+
+      if (partMatch) {
+        matches.push({
+          fieldName: "PART_NUMBER",
+          fieldValue: extractedPartNumber,
           confidence: extractedAttributes.PART_NUMBER?.confidence || "N/A",
+          matchType: "exact",
+          matchedKeyword: searchPartNumber,
         });
-
-        if (partMatch) {
-          matches.push({
-            fieldName: "PART_NUMBER",
-            fieldValue: extractedPartNumber,
-            confidence: extractedAttributes.PART_NUMBER?.confidence || "N/A",
-            matchType: "exact",
-            matchedKeyword: searchPartNumber,
-          });
-          hasMatch = true;
-        }
-      } else {
-        console.log("Extracted Part Number: Not found");
-        details.push({
-          type: "PART_NUMBER",
-          searchValue: searchPartNumber,
-          extractedValue: null,
-          match: false,
-          confidence: "N/A",
-        });
+        hasMatch = true;
       }
+    } else {
+      console.log("Extracted Part Number: Not found");
+      details.push({
+        type: "PART_NUMBER",
+        searchValue: searchPartNumber,
+        extractedValue: null,
+        match: false,
+        confidence: "N/A",
+      });
     }
+  }
 
-    // ADDED: Compare Matching Part Number
-    if (searchMatchingPartNumber) {
-      const normalizedSearchMatchingPart = normalizeForComparison(
-        searchMatchingPartNumber
-      );
-
-      const extractedPartNumber = extractedAttributes.PART_NUMBER?.value;
-
-      if (extractedPartNumber) {
-        const normalizedExtractedPart =
-          normalizeForComparison(extractedPartNumber);
-        const matchingPartMatch =
-          normalizedSearchMatchingPart === normalizedExtractedPart;
-
-        console.log(
-          `Extracted Part Number (vs Matching): "${extractedPartNumber}"`
-        );
-        console.log(
-          `Matching Part Number Match: ${
-            matchingPartMatch ? "✅ YES" : "❌ NO"
-          }`
-        );
-
-        details.push({
-          type: "MATCHING_PART_NUMBER",
-          searchValue: searchMatchingPartNumber,
-          extractedValue: extractedPartNumber,
-          match: matchingPartMatch,
-          confidence: extractedAttributes.PART_NUMBER?.confidence || "N/A",
-        });
-
-        if (matchingPartMatch) {
-          matches.push({
-            fieldName: "MATCHING_PART_NUMBER",
-            fieldValue: extractedPartNumber,
-            confidence: extractedAttributes.PART_NUMBER?.confidence || "N/A",
-            matchType: "exact",
-            matchedKeyword: searchMatchingPartNumber,
-          });
-          hasMatch = true;
-        }
-      } else {
-        console.log(
-          "Extracted Part Number (for Matching Part Number): Not found"
-        );
-        details.push({
-          type: "MATCHING_PART_NUMBER",
-          searchValue: searchMatchingPartNumber,
-          extractedValue: null,
-          match: false,
-          confidence: "N/A",
-        });
-      }
-    }
-
-    // ADDED: Compare ASIN with PRODUCT_IDENTIFIER (only for CPC documents)
-    if (searchASIN && isCPCDocument) {
-      const normalizedSearchASIN = normalizeForComparison(searchASIN);
-
-      const extractedProductIdentifier =
-        extractedAttributes.PRODUCT_IDENTIFIER?.value;
-
-      if (extractedProductIdentifier) {
-        const normalizedExtractedProductIdentifier = normalizeForComparison(
-          extractedProductIdentifier
-        );
-        const asinMatch =
-          normalizedSearchASIN === normalizedExtractedProductIdentifier;
-
-        console.log(
-          `Extracted Product Identifier: "${extractedProductIdentifier}"`
-        );
-        console.log(
-          `ASIN vs Product Identifier Match: ${asinMatch ? "✅ YES" : "❌ NO"}`
-        );
-
-        details.push({
-          type: "PRODUCT_IDENTIFIER",
-          searchValue: searchASIN,
-          extractedValue: extractedProductIdentifier,
-          match: asinMatch,
-          confidence:
-            extractedAttributes.PRODUCT_IDENTIFIER?.confidence || "N/A",
-        });
-
-        if (asinMatch) {
-          matches.push({
-            fieldName: "PRODUCT_IDENTIFIER",
-            fieldValue: extractedProductIdentifier,
-            confidence:
-              extractedAttributes.PRODUCT_IDENTIFIER?.confidence || "N/A",
-            matchType: "exact",
-            matchedKeyword: searchASIN,
-          });
-          hasMatch = true;
-        }
-      } else {
-        console.log("Extracted Product Identifier: Not found");
-        details.push({
-          type: "PRODUCT_IDENTIFIER",
-          searchValue: searchASIN,
-          extractedValue: null,
-          match: false,
-          confidence: "N/A",
-        });
-      }
-    } else if (searchASIN && !isCPCDocument) {
-      console.log("ASIN comparison skipped - not a CPC document");
-    }
-
-    console.log(
-      `\n🎯 OVERALL MATCH RESULT: ${
-        hasMatch ? "✅ MATCH FOUND" : "❌ NO MATCH"
-      }`
+  // Compare Matching Part Number
+  if (searchMatchingPartNumber) {
+    const normalizedSearchMatchingPart = normalizeForComparison(
+      searchMatchingPartNumber
     );
 
-    return {
-      hasMatch,
-      matches,
-      details,
-    };
+    const extractedPartNumber = extractedAttributes.PART_NUMBER?.value;
+
+    if (extractedPartNumber) {
+      const normalizedExtractedPart =
+        normalizeForComparison(extractedPartNumber);
+      const matchingPartMatch =
+        normalizedSearchMatchingPart === normalizedExtractedPart;
+
+      console.log(
+        `Extracted Part Number (vs Matching): "${extractedPartNumber}"`
+      );
+      console.log(
+        `Matching Part Number Match: ${
+          matchingPartMatch ? "✅ YES" : "❌ NO"
+        }`
+      );
+
+      details.push({
+        type: "MATCHING_PART_NUMBER",
+        searchValue: searchMatchingPartNumber,
+        extractedValue: extractedPartNumber,
+        match: matchingPartMatch,
+        confidence: extractedAttributes.PART_NUMBER?.confidence || "N/A",
+      });
+
+      if (matchingPartMatch) {
+        matches.push({
+          fieldName: "MATCHING_PART_NUMBER",
+          fieldValue: extractedPartNumber,
+          confidence: extractedAttributes.PART_NUMBER?.confidence || "N/A",
+          matchType: "exact",
+          matchedKeyword: searchMatchingPartNumber,
+        });
+        hasMatch = true;
+      }
+    } else {
+      console.log(
+        "Extracted Part Number (for Matching Part Number): Not found"
+      );
+      details.push({
+        type: "MATCHING_PART_NUMBER",
+        searchValue: searchMatchingPartNumber,
+        extractedValue: null,
+        match: false,
+        confidence: "N/A",
+      });
+    }
   }
+
+  // FIXED: Compare ASIN with PRODUCT_IDENTIFIER (only for CPC documents)
+  // Now handles comma-separated values in PRODUCT_IDENTIFIER
+  if (searchASIN && isCPCDocument) {
+    const normalizedSearchASIN = normalizeForComparison(searchASIN);
+
+    const extractedProductIdentifier =
+      extractedAttributes.PRODUCT_IDENTIFIER?.value;
+
+    if (extractedProductIdentifier) {
+      // Split the comma-separated values and normalize each one
+      const productIdentifiers = extractedProductIdentifier
+        .split(',')
+        .map(id => normalizeForComparison(id.trim()))
+        .filter(id => id.length > 0);
+
+      // Check if the search ASIN matches any of the product identifiers
+      const asinMatch = productIdentifiers.includes(normalizedSearchASIN);
+
+      console.log(
+        `Extracted Product Identifier: "${extractedProductIdentifier}"`
+      );
+      console.log(
+        `Product Identifiers (parsed): [${productIdentifiers.join(', ')}]`
+      );
+      console.log(
+        `ASIN vs Product Identifier Match: ${asinMatch ? "✅ YES" : "❌ NO"}`
+      );
+
+      details.push({
+        type: "PRODUCT_IDENTIFIER",
+        searchValue: searchASIN,
+        extractedValue: extractedProductIdentifier,
+        match: asinMatch,
+        confidence:
+          extractedAttributes.PRODUCT_IDENTIFIER?.confidence || "N/A",
+      });
+
+      if (asinMatch) {
+        matches.push({
+          fieldName: "PRODUCT_IDENTIFIER",
+          fieldValue: extractedProductIdentifier,
+          confidence:
+            extractedAttributes.PRODUCT_IDENTIFIER?.confidence || "N/A",
+          matchType: "exact",
+          matchedKeyword: searchASIN,
+        });
+        hasMatch = true;
+      }
+    } else {
+      console.log("Extracted Product Identifier: Not found");
+      details.push({
+        type: "PRODUCT_IDENTIFIER",
+        searchValue: searchASIN,
+        extractedValue: null,
+        match: false,
+        confidence: "N/A",
+      });
+    }
+  } else if (searchASIN && !isCPCDocument) {
+    console.log("ASIN comparison skipped - not a CPC document");
+  }
+
+  console.log(
+    `\n🎯 OVERALL MATCH RESULT: ${
+      hasMatch ? "✅ MATCH FOUND" : "❌ NO MATCH"
+    }`
+  );
+
+  return {
+    hasMatch,
+    matches,
+    details,
+  };
+}
 
   scanForAttributeTable() {
     try {
