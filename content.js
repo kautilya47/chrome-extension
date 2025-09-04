@@ -62,7 +62,7 @@ const config = {
   ],
 
   // Document and image patterns
-  documentPatterns: ["GCC", "testReport", "testReports", "cpc"],
+  documentPatterns: ["GCC", "testReport", "testReports"],
   imagePatterns: ["productImages"],
 
   // Timing configuration
@@ -196,20 +196,15 @@ class DynamicFieldTableScanner {
     this.fieldData = new Map();
     // Added PART_NUMBER to the target attributes
     this.targetAttributes = [
-      "DOC_TYPE",
-      "MODEL_NUMBER",
-      "PART_NUMBER",
-      "ASIN_MODEL_NUMBER", // Keep this as fallback for MODEL_NUMBER
-      "TR_NUMBER", // Adding TR_NUMBER as well
-      "PRODUCT_IDENTIFIER", // searching for product identifier in CPC
+      'DOC_TYPE',
+      'MODEL_NUMBER',
+      'PART_NUMBER',
+      'ASIN_MODEL_NUMBER', // Keep this as fallback for MODEL_NUMBER
+      'TR_NUMBER' // Adding TR_NUMBER as well
     ];
   }
 
-  async scanDynamicFieldTable(
-    searchModelNumber = null,
-    searchPartNumber = null,
-    maxWaitTime = config.dynamicTableWaitTime
-  ) {
+  async scanDynamicFieldTable(searchModelNumber = null, searchPartNumber = null, maxWaitTime = config.dynamicTableWaitTime) {
     console.log("DocuCheck: Scanning for attribute table...");
     this.fieldData.clear();
 
@@ -220,7 +215,7 @@ class DynamicFieldTableScanner {
     while (Date.now() - startTime < maxWaitTime && !tableFound) {
       attemptCount++;
       tableFound = this.scanForAttributeTable();
-
+      
       if (!tableFound && this.fieldData.size === 0) {
         await this.sleep(200);
       } else {
@@ -229,23 +224,17 @@ class DynamicFieldTableScanner {
     }
 
     if (tableFound || this.fieldData.size > 0) {
-      console.log(
-        `DocuCheck: Found ${this.fieldData.size} attributes in table`
-      );
-
+      console.log(`DocuCheck: Found ${this.fieldData.size} attributes in table`);
+      
       const extractedAttributes = this.extractTargetAttributes();
-      const matchResult = this.compareAttributes(
-        searchModelNumber,
-        searchPartNumber,
-        extractedAttributes
-      );
-
+      const matchResult = this.compareAttributes(searchModelNumber, searchPartNumber, extractedAttributes);
+      
       return {
         found: matchResult.hasMatch,
         matches: matchResult.matches,
         fieldData: this.fieldData,
         extractedAttributes: extractedAttributes,
-        comparisonResult: matchResult,
+        comparisonResult: matchResult
       };
     } else {
       console.log("DocuCheck: No attribute table found");
@@ -254,7 +243,7 @@ class DynamicFieldTableScanner {
         matches: [],
         fieldData: this.fieldData,
         extractedAttributes: {},
-        comparisonResult: { hasMatch: false, matches: [], details: [] },
+        comparisonResult: { hasMatch: false, matches: [], details: [] }
       };
     }
   }
@@ -271,52 +260,43 @@ class DynamicFieldTableScanner {
     // Compare Model Number
     if (searchModelNumber) {
       const normalizedSearchModel = normalizeForComparison(searchModelNumber);
-
+      
       // Check ASIN_MODEL_NUMBER first, then MODEL_NUMBER
-      const extractedModelNumber =
-        extractedAttributes.ASIN_MODEL_NUMBER?.value ||
-        extractedAttributes.MODEL_NUMBER?.value;
-
+      const extractedModelNumber = extractedAttributes.ASIN_MODEL_NUMBER?.value || extractedAttributes.MODEL_NUMBER?.value;
+      
       if (extractedModelNumber) {
-        const normalizedExtractedModel =
-          normalizeForComparison(extractedModelNumber);
+        const normalizedExtractedModel = normalizeForComparison(extractedModelNumber);
         const modelMatch = normalizedSearchModel === normalizedExtractedModel;
-
+        
         console.log(`Extracted Model Number: "${extractedModelNumber}"`);
         console.log(`Model Number Match: ${modelMatch ? "✅ YES" : "❌ NO"}`);
-
+        
         details.push({
-          type: "MODEL_NUMBER",
+          type: 'MODEL_NUMBER',
           searchValue: searchModelNumber,
           extractedValue: extractedModelNumber,
           match: modelMatch,
-          confidence:
-            extractedAttributes.ASIN_MODEL_NUMBER?.confidence ||
-            extractedAttributes.MODEL_NUMBER?.confidence ||
-            "N/A",
+          confidence: extractedAttributes.ASIN_MODEL_NUMBER?.confidence || extractedAttributes.MODEL_NUMBER?.confidence || 'N/A'
         });
 
         if (modelMatch) {
           matches.push({
-            fieldName: "MODEL_NUMBER",
+            fieldName: 'MODEL_NUMBER',
             fieldValue: extractedModelNumber,
-            confidence:
-              extractedAttributes.ASIN_MODEL_NUMBER?.confidence ||
-              extractedAttributes.MODEL_NUMBER?.confidence ||
-              "N/A",
-            matchType: "exact",
-            matchedKeyword: searchModelNumber,
+            confidence: extractedAttributes.ASIN_MODEL_NUMBER?.confidence || extractedAttributes.MODEL_NUMBER?.confidence || 'N/A',
+            matchType: 'exact',
+            matchedKeyword: searchModelNumber
           });
           hasMatch = true;
         }
       } else {
         console.log("Extracted Model Number: Not found");
         details.push({
-          type: "MODEL_NUMBER",
+          type: 'MODEL_NUMBER',
           searchValue: searchModelNumber,
           extractedValue: null,
           match: false,
-          confidence: "N/A",
+          confidence: 'N/A'
         });
       }
     }
@@ -324,102 +304,93 @@ class DynamicFieldTableScanner {
     // Compare Part Number
     if (searchPartNumber) {
       const normalizedSearchPart = normalizeForComparison(searchPartNumber);
-
+      
       const extractedPartNumber = extractedAttributes.PART_NUMBER?.value;
-
+      
       if (extractedPartNumber) {
-        const normalizedExtractedPart =
-          normalizeForComparison(extractedPartNumber);
+        const normalizedExtractedPart = normalizeForComparison(extractedPartNumber);
         const partMatch = normalizedSearchPart === normalizedExtractedPart;
-
+        
         console.log(`Extracted Part Number: "${extractedPartNumber}"`);
         console.log(`Part Number Match: ${partMatch ? "✅ YES" : "❌ NO"}`);
-
+        
         details.push({
-          type: "PART_NUMBER",
+          type: 'PART_NUMBER',
           searchValue: searchPartNumber,
           extractedValue: extractedPartNumber,
           match: partMatch,
-          confidence: extractedAttributes.PART_NUMBER?.confidence || "N/A",
+          confidence: extractedAttributes.PART_NUMBER?.confidence || 'N/A'
         });
 
         if (partMatch) {
           matches.push({
-            fieldName: "PART_NUMBER",
+            fieldName: 'PART_NUMBER',
             fieldValue: extractedPartNumber,
-            confidence: extractedAttributes.PART_NUMBER?.confidence || "N/A",
-            matchType: "exact",
-            matchedKeyword: searchPartNumber,
+            confidence: extractedAttributes.PART_NUMBER?.confidence || 'N/A',
+            matchType: 'exact',
+            matchedKeyword: searchPartNumber
           });
           hasMatch = true;
         }
       } else {
         console.log("Extracted Part Number: Not found");
         details.push({
-          type: "PART_NUMBER",
+          type: 'PART_NUMBER',
           searchValue: searchPartNumber,
           extractedValue: null,
           match: false,
-          confidence: "N/A",
+          confidence: 'N/A'
         });
       }
     }
 
-    console.log(
-      `\n🎯 OVERALL MATCH RESULT: ${
-        hasMatch ? "✅ MATCH FOUND" : "❌ NO MATCH"
-      }`
-    );
+    console.log(`\n🎯 OVERALL MATCH RESULT: ${hasMatch ? "✅ MATCH FOUND" : "❌ NO MATCH"}`);
 
     return {
       hasMatch,
       matches,
-      details,
+      details
     };
   }
 
   scanForAttributeTable() {
     try {
       let foundAny = false;
-      const tables = document.querySelectorAll("table");
-
+      const tables = document.querySelectorAll('table');
+      
       for (let tableIndex = 0; tableIndex < tables.length; tableIndex++) {
         const table = tables[tableIndex];
-        const headerRow = table.querySelector("tr");
-
+        const headerRow = table.querySelector('tr');
+        
         if (headerRow) {
-          const headers = Array.from(headerRow.querySelectorAll("th, td")).map(
-            (cell) => cell.textContent.trim()
-          );
-
+          const headers = Array.from(headerRow.querySelectorAll('th, td')).map(cell => cell.textContent.trim());
+          
           // Check if this matches our expected structure
-          if (
-            (headers.length >= 4 &&
-              headers.includes("Attribute") &&
-              headers.includes("Answer")) ||
-            (headers.includes("Question") && headers.includes("Confidence"))
-          ) {
-            const rows = table.querySelectorAll("tbody tr");
-
+          if (headers.length >= 4 && 
+              (headers.includes('Attribute') && headers.includes('Answer')) ||
+              (headers.includes('Question') && headers.includes('Confidence'))) {
+            
+            const rows = table.querySelectorAll('tbody tr');
+            
             rows.forEach((row, rowIndex) => {
-              const cells = row.querySelectorAll("td");
-
+              const cells = row.querySelectorAll('td');
+              
               if (cells.length >= 3) {
-                const cell1 = cells[1] ? cells[1].textContent.trim() : "";
-                const cell2 = cells[2] ? cells[2].textContent.trim() : "";
-                const cell3 = cells[3] ? cells[3].textContent.trim() : "";
-
-                if (cell1 && cell1 !== "Question" && cell1 !== "") {
+                const cell1 = cells[1] ? cells[1].textContent.trim() : '';
+                const cell2 = cells[2] ? cells[2].textContent.trim() : '';
+                const cell3 = cells[3] ? cells[3].textContent.trim() : '';
+                
+                if (cell1 && cell1 !== 'Question' && cell1 !== '') {
                   const attribute = cell1;
                   const answer = cell2;
                   const confidence = cell3;
-
+                  
                   this.fieldData.set(attribute, {
                     value: answer,
                     confidence: confidence,
-                    attribute: attribute,
+                    attribute: attribute
                   });
-
+                  
                   foundAny = true;
                 }
               }
@@ -427,7 +398,7 @@ class DynamicFieldTableScanner {
           }
         }
       }
-
+      
       return foundAny;
     } catch (error) {
       console.log("DocuCheck: Error scanning attribute table:", error);
@@ -437,7 +408,7 @@ class DynamicFieldTableScanner {
 
   extractTargetAttributes() {
     const extracted = {};
-
+    
     for (const targetAttr of this.targetAttributes) {
       // First try exact match
       if (this.fieldData.has(targetAttr)) {
@@ -446,36 +417,33 @@ class DynamicFieldTableScanner {
           attribute: fieldData.attribute,
           value: fieldData.value,
           confidence: fieldData.confidence,
-          matchedField: targetAttr,
+          matchedField: targetAttr
         };
       } else {
         // Try partial match
         const lowerTarget = targetAttr.toLowerCase();
-
+        
         for (const [fieldName, fieldData] of this.fieldData) {
           const lowerFieldName = fieldName.toLowerCase();
-
-          if (
-            lowerFieldName.includes(lowerTarget) ||
-            lowerTarget.includes(lowerFieldName)
-          ) {
+          
+          if (lowerFieldName.includes(lowerTarget) || lowerTarget.includes(lowerFieldName)) {
             extracted[targetAttr] = {
               attribute: fieldData.attribute,
               value: fieldData.value,
               confidence: fieldData.confidence,
-              matchedField: fieldName,
+              matchedField: fieldName
             };
             break;
           }
         }
       }
     }
-
+    
     return extracted;
   }
 
   sleep(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 }
 
@@ -656,45 +624,51 @@ class DocumentTypeUIManager {
 
     // Generate unique ID for this card
     const cardId = `doctype-${docType}-${Date.now()}`;
-
+    
     const card = document.createElement("div");
-    card.className = `flash-doctype-card ${
-      status === "MATCH" ? "match" : "no-match"
-    }`;
+    card.className = `flash-doctype-card ${status === 'MATCH' ? 'match' : 'no-match'}`;
     card.id = cardId;
 
     card.innerHTML = `
       <div class="flash-doctype-title">
-        <span>${docType || "Unknown Document"}</span>
-        <span class="flash-status-badge ${
-          status === "MATCH" ? "match" : "no-match"
-        }">${status}</span>
+        <span>${docType || 'Unknown Document'}</span>
+        <span class="flash-status-badge ${status === 'MATCH' ? 'match' : 'no-match'}">${status}</span>
       </div>
       <div class="flash-doctype-details">
         <div class="flash-detail-row">
           <span class="flash-detail-label">TR Number:</span>
-          <span class="flash-detail-value">${trNumber || "N/A"}</span>
+          <span class="flash-detail-value">${trNumber || 'N/A'}</span>
         </div>
-        ${
-          additionalInfo.modelNumber
-            ? `
+        ${additionalInfo.modelNumber ? `
         <div class="flash-detail-row">
           <span class="flash-detail-label">Model:</span>
           <span class="flash-detail-value">${additionalInfo.modelNumber}</span>
         </div>
-        `
-            : ""
-        }
-        ${
-          additionalInfo.partNumber
-            ? `
+        ` : ''}
+        ${additionalInfo.partNumber ? `
         <div class="flash-detail-row">
-          <span class="flash-detail-label">Part number:</span>
+          <span class="flash-detail-label">Part:</span>
           <span class="flash-detail-value">${additionalInfo.partNumber}</span>
         </div>
-        `
-            : ""
-        }
+        ` : ''}
+        ${additionalInfo.confidence ? `
+        <div class="flash-detail-row">
+          <span class="flash-detail-label">Confidence:</span>
+          <span class="flash-detail-value">${additionalInfo.confidence}</span>
+        </div>
+        ` : ''}
+        ${additionalInfo.artifactName ? `
+        <div class="flash-detail-row">
+          <span class="flash-detail-label">File:</span>
+          <span class="flash-detail-value">${additionalInfo.artifactName}</span>
+        </div>
+        ` : ''}
+        ${additionalInfo.matchDetails ? `
+        <div class="flash-detail-row">
+          <span class="flash-detail-label">Match Details:</span>
+          <span class="flash-detail-value">${additionalInfo.matchDetails}</span>
+        </div>
+        ` : ''}
       </div>
     `;
 
@@ -705,7 +679,7 @@ class DocumentTypeUIManager {
       docType,
       trNumber,
       status,
-      additionalInfo,
+      additionalInfo
     });
 
     return cardId;
@@ -714,7 +688,7 @@ class DocumentTypeUIManager {
   clearResults() {
     const grid = document.getElementById("flash-doctype-grid");
     if (grid) {
-      grid.innerHTML = "";
+      grid.innerHTML = '';
     }
     this.documentTypes.clear();
   }
@@ -1066,11 +1040,7 @@ class DocumentProcessor {
     this.searchPartNumber = null;
   }
 
-  async startProcessing(
-    filterType = null,
-    searchModelNumber = null,
-    searchPartNumber = null
-  ) {
+  async startProcessing(filterType = null, searchModelNumber = null, searchPartNumber = null) {
     if (this.isProcessing) {
       console.log("DocuCheck: Processing already in progress");
       return;
@@ -1200,15 +1170,15 @@ class DocumentProcessor {
         if (result.found) {
           this.foundCount++;
           console.log(
-            `DocuCheck: ✅ Match found in document ${this.currentIndex + 1}: ${
-              document.artifactName
-            }`
+            `DocuCheck: ✅ Match found in document ${
+              this.currentIndex + 1
+            }: ${document.artifactName}`
           );
         } else {
           console.log(
-            `DocuCheck: ❌ No match in document ${this.currentIndex + 1}: ${
-              document.artifactName
-            }`
+            `DocuCheck: ❌ No match in document ${
+              this.currentIndex + 1
+            }: ${document.artifactName}`
           );
         }
       } else {
@@ -1234,25 +1204,24 @@ class DocumentProcessor {
 
   createDocumentCard(document, result) {
     const extracted = result.extractedAttributes || {};
-
+    
     // Get DOC_TYPE
-    const docType = extracted.DOC_TYPE?.value || "Unknown Document";
-
+    const docType = extracted.DOC_TYPE?.value || 'Unknown Document';
+    
     // Get TR_NUMBER
-    const trNumber = extracted.TR_NUMBER?.value || "N/A";
-
+    const trNumber = extracted.TR_NUMBER?.value || 'N/A';
+    
     // Determine status based on actual comparison result
-    const status = result.found ? "MATCH" : "NO MATCH";
-
+    const status = result.found ? 'MATCH' : 'NO MATCH';
+    
     // Prepare additional info
     const additionalInfo = {
       artifactName: document.artifactName,
-      confidence: extracted.DOC_TYPE?.confidence || "N/A",
+      confidence: extracted.DOC_TYPE?.confidence || 'N/A'
     };
 
     // Add extracted model number if available
-    const extractedModelNumber =
-      extracted.ASIN_MODEL_NUMBER?.value || extracted.MODEL_NUMBER?.value;
+    const extractedModelNumber = extracted.ASIN_MODEL_NUMBER?.value || extracted.MODEL_NUMBER?.value;
     if (extractedModelNumber) {
       additionalInfo.modelNumber = extractedModelNumber;
     }
@@ -1265,14 +1234,14 @@ class DocumentProcessor {
     // Add match details if available
     if (result.comparisonResult && result.comparisonResult.details) {
       const matchedItems = result.comparisonResult.details
-        .filter((detail) => detail.match)
-        .map((detail) => detail.type)
-        .join(", ");
-
+        .filter(detail => detail.match)
+        .map(detail => detail.type)
+        .join(', ');
+      
       if (matchedItems) {
         additionalInfo.matchDetails = `Matched: ${matchedItems}`;
       } else {
-        additionalInfo.matchDetails = "No exact matches found";
+        additionalInfo.matchDetails = 'No exact matches found';
       }
     }
 
@@ -1295,10 +1264,8 @@ class DocumentProcessor {
         rowElement.classList.add("flash-highlight");
       }
 
-      console.log(
-        `DocuCheck: Processing row ${document.rowIndex} - ${document.artifactName}`
-      );
-
+      console.log(`DocuCheck: Processing row ${document.rowIndex} - ${document.artifactName}`);
+      
       const checkboxSuccess = await this.clickCheckboxRobust(document.checkbox);
       if (!checkboxSuccess) {
         if (rowElement) rowElement.classList.remove("flash-highlight");
@@ -1316,11 +1283,10 @@ class DocumentProcessor {
       }
 
       // Search the dynamic field table with comparison logic
-      const searchResult =
-        await this.catalog.dynamicFieldScanner.scanDynamicFieldTable(
-          this.searchModelNumber,
-          this.searchPartNumber
-        );
+      const searchResult = await this.catalog.dynamicFieldScanner.scanDynamicFieldTable(
+        this.searchModelNumber, 
+        this.searchPartNumber
+      );
 
       if (rowElement) {
         setTimeout(() => {
@@ -1330,9 +1296,7 @@ class DocumentProcessor {
 
       // Update UI based on comparison results
       if (searchResult.found) {
-        const matchedFields = searchResult.matches
-          .map((m) => m.fieldName)
-          .join(", ");
+        const matchedFields = searchResult.matches.map(m => m.fieldName).join(', ');
         const message = `✅ Match found: ${matchedFields}`;
         console.log(message);
         if (this.ui?.resultMessage) this.ui.resultMessage.textContent = message;
@@ -1345,64 +1309,46 @@ class DocumentProcessor {
       // Enhanced extraction logging
       const extracted = searchResult.extractedAttributes || {};
       console.log(`\n📋 EXTRACTED ATTRIBUTES for ${document.artifactName}:`);
-
+      
       let foundAnyAttributes = false;
-
+      
       // Check for DOC_TYPE
       if (extracted.DOC_TYPE?.value) {
-        console.log(
-          `DOC_TYPE: ${extracted.DOC_TYPE.value} (${
-            extracted.DOC_TYPE.confidence || "N/A"
-          })`
-        );
+        console.log(`DOC_TYPE: ${extracted.DOC_TYPE.value} (${extracted.DOC_TYPE.confidence || 'N/A'})`);
         foundAnyAttributes = true;
       }
 
       // Check for TR_NUMBER
       if (extracted.TR_NUMBER?.value) {
-        console.log(
-          `TR_NUMBER: ${extracted.TR_NUMBER.value} (${
-            extracted.TR_NUMBER.confidence || "N/A"
-          })`
-        );
+        console.log(`TR_NUMBER: ${extracted.TR_NUMBER.value} (${extracted.TR_NUMBER.confidence || 'N/A'})`);
         foundAnyAttributes = true;
       }
-
+      
       // Check for MODEL_NUMBER (try ASIN_MODEL_NUMBER first, then MODEL_NUMBER)
-      const modelNumber =
-        extracted.ASIN_MODEL_NUMBER?.value || extracted.MODEL_NUMBER?.value;
+      const modelNumber = extracted.ASIN_MODEL_NUMBER?.value || extracted.MODEL_NUMBER?.value;
       if (modelNumber) {
-        console.log(
-          `MODEL_NUMBER: ${modelNumber} (${
-            extracted.ASIN_MODEL_NUMBER?.confidence ||
-            extracted.MODEL_NUMBER?.confidence ||
-            "N/A"
-          })`
-        );
+        console.log(`MODEL_NUMBER: ${modelNumber} (${extracted.ASIN_MODEL_NUMBER?.confidence || extracted.MODEL_NUMBER?.confidence || 'N/A'})`);
         foundAnyAttributes = true;
       }
 
       // Check for PART_NUMBER
       if (extracted.PART_NUMBER?.value) {
-        console.log(
-          `PART_NUMBER: ${extracted.PART_NUMBER.value} (${
-            extracted.PART_NUMBER.confidence || "N/A"
-          })`
-        );
+        console.log(`PART_NUMBER: ${extracted.PART_NUMBER.value} (${extracted.PART_NUMBER.confidence || 'N/A'})`);
         foundAnyAttributes = true;
       }
-
+      
       if (!foundAnyAttributes) {
         console.log("No target attributes found in this document");
       }
 
-      return {
-        processed: true,
-        found: searchResult.found,
+      return { 
+        processed: true, 
+        found: searchResult.found, 
         matches: searchResult.matches || [],
         extractedAttributes: extracted,
-        comparisonResult: searchResult.comparisonResult || null,
+        comparisonResult: searchResult.comparisonResult || null
       };
+
     } catch (err) {
       console.error(`DocuCheck: Error processing document:`, err);
       return { processed: false, found: false };
@@ -1626,11 +1572,7 @@ async function initialize() {
     // Initialize global instances
     documentCatalog = new DocumentCatalog();
     docTypeUIManager = new DocumentTypeUIManager();
-    documentProcessor = new DocumentProcessor(
-      documentCatalog,
-      ui,
-      docTypeUIManager
-    );
+    documentProcessor = new DocumentProcessor(documentCatalog, ui, docTypeUIManager);
 
     // Button click handler
     if (ui.documentsButton) {
@@ -1644,7 +1586,7 @@ async function initialize() {
         // Step 3: Fetch the model number and part number
         const modelNumber = getValueByLabel("Model Number");
         const partNumber = getValueByLabel("Part Number");
-
+        
         console.log("DocuCheck: Model Number:", modelNumber);
         console.log("DocuCheck: Part Number:", partNumber);
 
@@ -1655,27 +1597,21 @@ async function initialize() {
           return;
         }
 
-        console.log(
-          "DocuCheck: Will compare with extracted MODEL_NUMBER and PART_NUMBER"
-        );
+        console.log("DocuCheck: Will compare with extracted MODEL_NUMBER and PART_NUMBER");
 
         // Step 4: Start document processing with exact comparison logic
         if (!documentProcessor.isProcessing) {
           // Create the document type UI container
           docTypeUIManager.createDocumentTypeUI();
-
+          
           // Start processing with the extracted model and part numbers
-          documentProcessor.startProcessing(
-            "documents",
-            modelNumber,
-            partNumber
-          );
+          documentProcessor.startProcessing("documents", modelNumber, partNumber);
         }
       });
     }
 
     console.log(
-      "DocuCheck: Enhanced extension initialized successfully with exact MODEL_NUMBER and PART_NUMBER comparison"
+      "DocuCheck: Enhanced extension initialized successfully with MODEL_NUMBER, PART_NUMBER, MATCHING_PART_NUMBER, and PRODUCT_IDENTIFIER comparison for CPC documents"
     );
     return ui;
   } catch (error) {
