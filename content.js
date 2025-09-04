@@ -1,6 +1,6 @@
-// Enhanced Content Script with Checkbox + Dynamic Field Table Search + PART_NUMBER + Doc Type UI
+// Enhanced Content Script with Checkbox + Dynamic Field Table Search + PART_NUMBER + Doc Type UI + CPC Pattern + ASIN Matching
 console.log(
-  "DocuCheck: Loading enhanced extension with checkbox field table search..."
+  "DocuCheck: Loading enhanced extension with checkbox field table search and CPC pattern support..."
 );
 
 const config = {
@@ -61,7 +61,15 @@ const config = {
     ],
   ],
 
-  // Document and image patterns
+  // ASIN XPath patterns for different div containers
+  asinXPathPatterns: [
+    "/html/body/div[1]/div/div[2]/div/div/main/div/div/div/div[1]/div/div/div/h3/span/span[2]/span/button/span[2]",
+    "/html/body/div[2]/div/div[2]/div/div/main/div/div/div/div[1]/div/div/div/h3/span/span[2]/span/button/span[2]",
+    "/html/body/div[3]/div/div[2]/div/div/main/div/div/div/div[1]/div/div/div/h3/span/span[2]/span/button/span[2]",
+    "/html/body/div[4]/div/div[2]/div/div/main/div/div/div/div[1]/div/div/div/h3/span/span[2]/span/button/span[2]",
+  ],
+
+  // Document and image patterns - ADDED "cpc" to document patterns
   documentPatterns: ["GCC", "testReport", "testReports", "cpc"],
   imagePatterns: ["productImages"],
 
@@ -142,6 +150,31 @@ function getValueByLabel(labelText) {
   return null;
 }
 
+// ADDED: Function to get ASIN using XPath patterns
+function getASIN() {
+  for (const xpathPattern of config.asinXPathPatterns) {
+    try {
+      const element = document.evaluate(
+        xpathPattern,
+        document,
+        null,
+        XPathResult.FIRST_ORDERED_NODE_TYPE,
+        null
+      ).singleNodeValue;
+      
+      if (element) {
+        const asinValue = element.textContent.trim();
+        console.log(`DocuCheck: Found ASIN: ${asinValue}`);
+        return asinValue;
+      }
+    } catch (error) {
+      console.log(`DocuCheck: ASIN XPath pattern failed: ${xpathPattern}`, error);
+    }
+  }
+  console.log("DocuCheck: No ASIN found");
+  return null;
+}
+
 // Helper function for getValueByLabel function
 function clean(str) {
   if (typeof str !== "string") return "";
@@ -190,7 +223,7 @@ function getMediaHistoryTabElement() {
   return getElementByXPathMultiPattern(config.mediaHistoryTabXPathPatterns);
 }
 
-// Enhanced Dynamic Field Table Scanner - Now includes PART_NUMBER and comparison logic
+// Enhanced Dynamic Field Table Scanner - Now includes PART_NUMBER and comparison logic with CPC support
 class DynamicFieldTableScanner {
   constructor() {
     this.fieldData = new Map();
@@ -208,6 +241,8 @@ class DynamicFieldTableScanner {
   async scanDynamicFieldTable(
     searchModelNumber = null,
     searchPartNumber = null,
+    searchMatchingPartNumber = null, // ADDED: New parameter for Matching Part Number
+    searchASIN = null, // ADDED: New parameter for ASIN
     maxWaitTime = config.dynamicTableWaitTime
   ) {
     console.log("DocuCheck: Scanning for attribute table...");
@@ -237,6 +272,8 @@ class DynamicFieldTableScanner {
       const matchResult = this.compareAttributes(
         searchModelNumber,
         searchPartNumber,
+        searchMatchingPartNumber, // ADDED: Pass the new parameter
+        searchASIN, // ADDED: Pass ASIN parameter
         extractedAttributes
       );
 
@@ -259,7 +296,8 @@ class DynamicFieldTableScanner {
     }
   }
 
-  compareAttributes(searchModelNumber, searchPartNumber, extractedAttributes) {
+  // ENHANCED: Updated compareAttributes method to include Matching Part Number and ASIN comparison
+  compareAttributes(searchModelNumber, searchPartNumber, searchMatchingPartNumber, searchASIN, extractedAttributes) {
     const matches = [];
     const details = [];
     let hasMatch = false;
@@ -267,6 +305,15 @@ class DynamicFieldTableScanner {
     console.log("\n🔍 COMPARING ATTRIBUTES:");
     console.log(`Search Model Number: "${searchModelNumber}"`);
     console.log(`Search Part Number: "${searchPartNumber}"`);
+    console.log(`Search Matching Part Number: "${searchMatchingPartNumber}"`); // ADDED
+    console.log(`Search ASIN: "${searchASIN}"`); // ADDED
+
+    // Determine if this is a CPC document
+    const docType = extractedAttributes.DOC_TYPE?.value;
+    const isCPCDocument = docType && normalizeForComparison(docType).includes("cpc");
+    
+    console.log(`Document Type: "${docType}"`);
+    console.log(`Is CPC Document: ${isCPCDocument}`);
 
     // Compare Model Number
     if (searchModelNumber) {
@@ -363,6 +410,96 @@ class DynamicFieldTableScanner {
           confidence: "N/A",
         });
       }
+    }
+
+    // ADDED: Compare Matching Part Number
+    if (searchMatchingPartNumber) {
+      const normalizedSearchMatchingPart = normalizeForComparison(searchMatchingPartNumber);
+
+      const extractedPartNumber = extractedAttributes.PART_NUMBER?.value;
+
+      if (extractedPartNumber) {
+        const normalizedExtractedPart =
+          normalizeForComparison(extractedPartNumber);
+        const matchingPartMatch = normalizedSearchMatchingPart === normalizedExtractedPart;
+
+        console.log(`Extracted Part Number (vs Matching): "${extractedPartNumber}"`);
+        console.log(`Matching Part Number Match: ${matchingPartMatch ? "✅ YES" : "❌ NO"}`);
+
+        details.push({
+          type: "MATCHING_PART_NUMBER",
+          searchValue: searchMatchingPartNumber,
+          extractedValue: extractedPartNumber,
+          match: matchingPartMatch,
+          confidence: extractedAttributes.PART_NUMBER?.confidence || "N/A",
+        });
+
+        if (matchingPartMatch) {
+          matches.push({
+            fieldName: "MATCHING_PART_NUMBER",
+            fieldValue: extractedPartNumber,
+            confidence: extractedAttributes.PART_NUMBER?.confidence || "N/A",
+            matchType: "exact",
+            matchedKeyword: searchMatchingPartNumber,
+          });
+          hasMatch = true;
+        }
+      } else {
+        console.log("Extracted Part Number (for Matching Part Number): Not found");
+        details.push({
+          type: "MATCHING_PART_NUMBER",
+          searchValue: searchMatchingPartNumber,
+          extractedValue: null,
+          match: false,
+          confidence: "N/A",
+        });
+      }
+    }
+
+    // ADDED: Compare ASIN with PRODUCT_IDENTIFIER (only for CPC documents)
+    if (searchASIN && isCPCDocument) {
+      const normalizedSearchASIN = normalizeForComparison(searchASIN);
+
+      const extractedProductIdentifier = extractedAttributes.PRODUCT_IDENTIFIER?.value;
+
+      if (extractedProductIdentifier) {
+        const normalizedExtractedProductIdentifier =
+          normalizeForComparison(extractedProductIdentifier);
+        const asinMatch = normalizedSearchASIN === normalizedExtractedProductIdentifier;
+
+        console.log(`Extracted Product Identifier: "${extractedProductIdentifier}"`);
+        console.log(`ASIN vs Product Identifier Match: ${asinMatch ? "✅ YES" : "❌ NO"}`);
+
+        details.push({
+          type: "PRODUCT_IDENTIFIER",
+          searchValue: searchASIN,
+          extractedValue: extractedProductIdentifier,
+          match: asinMatch,
+          confidence: extractedAttributes.PRODUCT_IDENTIFIER?.confidence || "N/A",
+        });
+
+        if (asinMatch) {
+          matches.push({
+            fieldName: "PRODUCT_IDENTIFIER",
+            fieldValue: extractedProductIdentifier,
+            confidence: extractedAttributes.PRODUCT_IDENTIFIER?.confidence || "N/A",
+            matchType: "exact",
+            matchedKeyword: searchASIN,
+          });
+          hasMatch = true;
+        }
+      } else {
+        console.log("Extracted Product Identifier: Not found");
+        details.push({
+          type: "PRODUCT_IDENTIFIER",
+          searchValue: searchASIN,
+          extractedValue: null,
+          match: false,
+          confidence: "N/A",
+        });
+      }
+    } else if (searchASIN && !isCPCDocument) {
+      console.log("ASIN comparison skipped - not a CPC document");
     }
 
     console.log(
@@ -691,6 +828,26 @@ class DocumentTypeUIManager {
         <div class="flash-detail-row">
           <span class="flash-detail-label">Part number:</span>
           <span class="flash-detail-value">${additionalInfo.partNumber}</span>
+        </div>
+        `
+            : ""
+        }
+        ${
+          additionalInfo.matchingPartNumber
+            ? `
+        <div class="flash-detail-row">
+          <span class="flash-detail-label">Matching Part:</span>
+          <span class="flash-detail-value">${additionalInfo.matchingPartNumber}</span>
+        </div>
+        `
+            : ""
+        }
+        ${
+          additionalInfo.asin
+            ? `
+        <div class="flash-detail-row">
+          <span class="flash-detail-label">ASIN:</span>
+          <span class="flash-detail-value">${additionalInfo.asin}</span>
         </div>
         `
             : ""
@@ -1051,7 +1208,7 @@ class DocumentCatalog {
   }
 }
 
-// Enhanced Document Processor class - now uses exact comparison logic
+// Enhanced Document Processor class - now uses exact comparison logic with CPC support
 class DocumentProcessor {
   constructor(catalog, ui, docTypeUIManager) {
     this.catalog = catalog;
@@ -1064,12 +1221,16 @@ class DocumentProcessor {
     this.foundCount = 0;
     this.searchModelNumber = null;
     this.searchPartNumber = null;
+    this.searchMatchingPartNumber = null; // ADDED
+    this.searchASIN = null; // ADDED
   }
 
   async startProcessing(
     filterType = null,
     searchModelNumber = null,
-    searchPartNumber = null
+    searchPartNumber = null,
+    searchMatchingPartNumber = null, // ADDED
+    searchASIN = null // ADDED
   ) {
     if (this.isProcessing) {
       console.log("DocuCheck: Processing already in progress");
@@ -1079,6 +1240,8 @@ class DocumentProcessor {
     console.log("DocuCheck: Starting processing session");
     console.log(`Search Model Number: "${searchModelNumber}"`);
     console.log(`Search Part Number: "${searchPartNumber}"`);
+    console.log(`Search Matching Part Number: "${searchMatchingPartNumber}"`); // ADDED
+    console.log(`Search ASIN: "${searchASIN}"`); // ADDED
 
     this.catalog.resetCurrentSession();
 
@@ -1088,6 +1251,8 @@ class DocumentProcessor {
     this.currentIndex = 0;
     this.searchModelNumber = searchModelNumber;
     this.searchPartNumber = searchPartNumber;
+    this.searchMatchingPartNumber = searchMatchingPartNumber; // ADDED
+    this.searchASIN = searchASIN; // ADDED
 
     this.ui.documentsButton.classList.add("processing");
     this.ui.documentsButton.textContent = "Processing...";
@@ -1262,6 +1427,16 @@ class DocumentProcessor {
       additionalInfo.partNumber = extracted.PART_NUMBER.value;
     }
 
+    // ADDED: Add matching part number if used in search
+    if (this.searchMatchingPartNumber) {
+      additionalInfo.matchingPartNumber = this.searchMatchingPartNumber;
+    }
+
+    // ADDED: Add ASIN if used in search
+    if (this.searchASIN) {
+      additionalInfo.asin = this.searchASIN;
+    }
+
     // Add match details if available
     if (result.comparisonResult && result.comparisonResult.details) {
       const matchedItems = result.comparisonResult.details
@@ -1315,11 +1490,13 @@ class DocumentProcessor {
         this.ui.resultMessage.textContent = `🔍 Comparing attributes...`;
       }
 
-      // Search the dynamic field table with comparison logic
+      // ENHANCED: Search the dynamic field table with comparison logic including new parameters
       const searchResult =
         await this.catalog.dynamicFieldScanner.scanDynamicFieldTable(
           this.searchModelNumber,
-          this.searchPartNumber
+          this.searchPartNumber,
+          this.searchMatchingPartNumber, // ADDED
+          this.searchASIN // ADDED
         );
 
       if (rowElement) {
@@ -1337,7 +1514,7 @@ class DocumentProcessor {
         console.log(message);
         if (this.ui?.resultMessage) this.ui.resultMessage.textContent = message;
       } else {
-        const message = `❌ No matching model/part numbers found`;
+        const message = `❌ No matching attributes found`;
         console.log(message);
         if (this.ui?.resultMessage) this.ui.resultMessage.textContent = message;
       }
@@ -1387,6 +1564,16 @@ class DocumentProcessor {
         console.log(
           `PART_NUMBER: ${extracted.PART_NUMBER.value} (${
             extracted.PART_NUMBER.confidence || "N/A"
+          })`
+        );
+        foundAnyAttributes = true;
+      }
+
+      // ADDED: Check for PRODUCT_IDENTIFIER
+      if (extracted.PRODUCT_IDENTIFIER?.value) {
+        console.log(
+          `PRODUCT_IDENTIFIER: ${extracted.PRODUCT_IDENTIFIER.value} (${
+            extracted.PRODUCT_IDENTIFIER.confidence || "N/A"
           })`
         );
         foundAnyAttributes = true;
@@ -1473,7 +1660,7 @@ class DocumentProcessor {
 
     // Show final summary
     if (this.processedCount > 0) {
-      const finalMessage = `✅ Complete: ${this.foundCount}/${this.processedCount} documents had matching model/part numbers`;
+      const finalMessage = `✅ Complete: ${this.foundCount}/${this.processedCount} documents had matching attributes`;
       if (this.ui?.resultMessage) {
         this.ui.resultMessage.textContent = finalMessage;
         setTimeout(() => {
@@ -1641,41 +1828,47 @@ async function initialize() {
         // Step 2: Wait for tab content to load
         await new Promise((resolve) => setTimeout(resolve, 2000));
 
-        // Step 3: Fetch the model number and part number
+        // Step 3: Fetch the model number, part number, matching part number, and ASIN
         const modelNumber = getValueByLabel("Model Number");
         const partNumber = getValueByLabel("Part Number");
+        const matchingPartNumber = getValueByLabel("Matching Part Number"); // ADDED
+        const asin = getASIN(); // ADDED
 
         console.log("DocuCheck: Model Number:", modelNumber);
         console.log("DocuCheck: Part Number:", partNumber);
+        console.log("DocuCheck: Matching Part Number:", matchingPartNumber); // ADDED
+        console.log("DocuCheck: ASIN:", asin); // ADDED
 
-        if (!modelNumber && !partNumber) {
+        if (!modelNumber && !partNumber && !matchingPartNumber && !asin) {
           if (ui.resultMessage) {
-            ui.resultMessage.textContent = "⚠️ No model or part number found";
+            ui.resultMessage.textContent = "⚠️ No search parameters found";
           }
           return;
         }
 
         console.log(
-          "DocuCheck: Will compare with extracted MODEL_NUMBER and PART_NUMBER"
+          "DocuCheck: Will compare with extracted attributes including PRODUCT_IDENTIFIER for CPC documents"
         );
 
-        // Step 4: Start document processing with exact comparison logic
+        // Step 4: Start document processing with exact comparison logic including new parameters
         if (!documentProcessor.isProcessing) {
           // Create the document type UI container
           docTypeUIManager.createDocumentTypeUI();
 
-          // Start processing with the extracted model and part numbers
+          // Start processing with all the extracted parameters
           documentProcessor.startProcessing(
             "documents",
             modelNumber,
-            partNumber
+            partNumber,
+            matchingPartNumber, // ADDED
+            asin // ADDED
           );
         }
       });
     }
 
     console.log(
-      "DocuCheck: Enhanced extension initialized successfully with exact MODEL_NUMBER and PART_NUMBER comparison"
+      "DocuCheck: Enhanced extension initialized successfully with CPC pattern support, ASIN matching, and Matching Part Number"
     );
     return ui;
   } catch (error) {
