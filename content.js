@@ -161,14 +161,17 @@ function getASIN() {
         XPathResult.FIRST_ORDERED_NODE_TYPE,
         null
       ).singleNodeValue;
-      
+
       if (element) {
-        const asinValue = element.textContent.trim();
+        const asinValue = element.textContent.trim().replace("ASIN: ", "");
         console.log(`DocuCheck: Found ASIN: ${asinValue}`);
         return asinValue;
       }
     } catch (error) {
-      console.log(`DocuCheck: ASIN XPath pattern failed: ${xpathPattern}`, error);
+      console.log(
+        `DocuCheck: ASIN XPath pattern failed: ${xpathPattern}`,
+        error
+      );
     }
   }
   console.log("DocuCheck: No ASIN found");
@@ -297,7 +300,13 @@ class DynamicFieldTableScanner {
   }
 
   // ENHANCED: Updated compareAttributes method to include Matching Part Number and ASIN comparison
-  compareAttributes(searchModelNumber, searchPartNumber, searchMatchingPartNumber, searchASIN, extractedAttributes) {
+  compareAttributes(
+    searchModelNumber,
+    searchPartNumber,
+    searchMatchingPartNumber,
+    searchASIN,
+    extractedAttributes
+  ) {
     const matches = [];
     const details = [];
     let hasMatch = false;
@@ -310,8 +319,9 @@ class DynamicFieldTableScanner {
 
     // Determine if this is a CPC document
     const docType = extractedAttributes.DOC_TYPE?.value;
-    const isCPCDocument = docType && normalizeForComparison(docType).includes("cpc");
-    
+    const isCPCDocument =
+      docType && normalizeForComparison(docType).includes("cpc");
+
     console.log(`Document Type: "${docType}"`);
     console.log(`Is CPC Document: ${isCPCDocument}`);
 
@@ -414,17 +424,26 @@ class DynamicFieldTableScanner {
 
     // ADDED: Compare Matching Part Number
     if (searchMatchingPartNumber) {
-      const normalizedSearchMatchingPart = normalizeForComparison(searchMatchingPartNumber);
+      const normalizedSearchMatchingPart = normalizeForComparison(
+        searchMatchingPartNumber
+      );
 
       const extractedPartNumber = extractedAttributes.PART_NUMBER?.value;
 
       if (extractedPartNumber) {
         const normalizedExtractedPart =
           normalizeForComparison(extractedPartNumber);
-        const matchingPartMatch = normalizedSearchMatchingPart === normalizedExtractedPart;
+        const matchingPartMatch =
+          normalizedSearchMatchingPart === normalizedExtractedPart;
 
-        console.log(`Extracted Part Number (vs Matching): "${extractedPartNumber}"`);
-        console.log(`Matching Part Number Match: ${matchingPartMatch ? "✅ YES" : "❌ NO"}`);
+        console.log(
+          `Extracted Part Number (vs Matching): "${extractedPartNumber}"`
+        );
+        console.log(
+          `Matching Part Number Match: ${
+            matchingPartMatch ? "✅ YES" : "❌ NO"
+          }`
+        );
 
         details.push({
           type: "MATCHING_PART_NUMBER",
@@ -445,7 +464,9 @@ class DynamicFieldTableScanner {
           hasMatch = true;
         }
       } else {
-        console.log("Extracted Part Number (for Matching Part Number): Not found");
+        console.log(
+          "Extracted Part Number (for Matching Part Number): Not found"
+        );
         details.push({
           type: "MATCHING_PART_NUMBER",
           searchValue: searchMatchingPartNumber,
@@ -460,29 +481,38 @@ class DynamicFieldTableScanner {
     if (searchASIN && isCPCDocument) {
       const normalizedSearchASIN = normalizeForComparison(searchASIN);
 
-      const extractedProductIdentifier = extractedAttributes.PRODUCT_IDENTIFIER?.value;
+      const extractedProductIdentifier =
+        extractedAttributes.PRODUCT_IDENTIFIER?.value;
 
       if (extractedProductIdentifier) {
-        const normalizedExtractedProductIdentifier =
-          normalizeForComparison(extractedProductIdentifier);
-        const asinMatch = normalizedSearchASIN === normalizedExtractedProductIdentifier;
+        const normalizedExtractedProductIdentifier = normalizeForComparison(
+          extractedProductIdentifier
+        );
+        const asinMatch =
+          normalizedSearchASIN === normalizedExtractedProductIdentifier;
 
-        console.log(`Extracted Product Identifier: "${extractedProductIdentifier}"`);
-        console.log(`ASIN vs Product Identifier Match: ${asinMatch ? "✅ YES" : "❌ NO"}`);
+        console.log(
+          `Extracted Product Identifier: "${extractedProductIdentifier}"`
+        );
+        console.log(
+          `ASIN vs Product Identifier Match: ${asinMatch ? "✅ YES" : "❌ NO"}`
+        );
 
         details.push({
           type: "PRODUCT_IDENTIFIER",
           searchValue: searchASIN,
           extractedValue: extractedProductIdentifier,
           match: asinMatch,
-          confidence: extractedAttributes.PRODUCT_IDENTIFIER?.confidence || "N/A",
+          confidence:
+            extractedAttributes.PRODUCT_IDENTIFIER?.confidence || "N/A",
         });
 
         if (asinMatch) {
           matches.push({
             fieldName: "PRODUCT_IDENTIFIER",
             fieldValue: extractedProductIdentifier,
-            confidence: extractedAttributes.PRODUCT_IDENTIFIER?.confidence || "N/A",
+            confidence:
+              extractedAttributes.PRODUCT_IDENTIFIER?.confidence || "N/A",
             matchType: "exact",
             matchedKeyword: searchASIN,
           });
