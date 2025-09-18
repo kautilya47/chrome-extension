@@ -303,378 +303,421 @@ class DynamicFieldTableScanner {
 
   // ENHANCED: Updated compareAttributes method to handle multiple MODEL_NUMBER attributes and ASIN inclusion matching
   compareAttributes(
-  searchModelNumber,
-  searchPartNumber,
-  searchMatchingPartNumber,
-  searchASIN,
-  extractedAttributes
-) {
-  const matches = [];
-  const details = [];
-  let hasMatch = false;
+    searchModelNumber,
+    searchPartNumber,
+    searchMatchingPartNumber,
+    searchASIN,
+    extractedAttributes
+  ) {
+    const matches = [];
+    const details = [];
+    let hasMatch = false;
 
-  console.log("\n🔍 COMPARING ATTRIBUTES:");
-  console.log(`Search Model Number: "${searchModelNumber}"`);
-  console.log(`Search Part Number: "${searchPartNumber}"`);
-  console.log(`Search Matching Part Number: "${searchMatchingPartNumber}"`);
-  console.log(`Search ASIN: "${searchASIN}"`);
+    console.log("\n🔍 COMPARING ATTRIBUTES:");
+    console.log(`Search Model Number: "${searchModelNumber}"`);
+    console.log(`Search Part Number: "${searchPartNumber}"`);
+    console.log(`Search Matching Part Number: "${searchMatchingPartNumber}"`);
+    console.log(`Search ASIN: "${searchASIN}"`);
 
-  // Determine if this is a CPC document
-  const docType = extractedAttributes.DOC_TYPE?.value;
-  const isCPCDocument =
-    docType && normalizeForComparison(docType).includes("cpc");
+    // Determine if this is a CPC document
+    const docType = extractedAttributes.DOC_TYPE?.value;
+    const isCPCDocument =
+      docType && normalizeForComparison(docType).includes("cpc");
 
-  console.log(`Document Type: "${docType}"`);
-  console.log(`Is CPC Document: ${isCPCDocument}`);
+    console.log(`Document Type: "${docType}"`);
+    console.log(`Is CPC Document: ${isCPCDocument}`);
 
-  // Get all MODEL_NUMBER attributes (including multiple ones)
-  const allModelNumbers = this.getAllModelNumbers();
-  console.log(`Found ${allModelNumbers.length} MODEL_NUMBER attributes:`, allModelNumbers);
+    // Get all MODEL_NUMBER attributes (including multiple ones)
+    const allModelNumbers = this.getAllModelNumbers();
+    console.log(
+      `Found ${allModelNumbers.length} MODEL_NUMBER attributes:`,
+      allModelNumbers
+    );
 
-  // NEW: Get all PRODUCT_IDENTIFIER attributes (including multiple ones)
-  const allProductIdentifiers = this.getAllProductIdentifiers();
-  console.log(`Found ${allProductIdentifiers.length} PRODUCT_IDENTIFIER attributes:`, allProductIdentifiers);
+    // NEW: Get all PRODUCT_IDENTIFIER attributes (including multiple ones)
+    const allProductIdentifiers = this.getAllProductIdentifiers();
+    console.log(
+      `Found ${allProductIdentifiers.length} PRODUCT_IDENTIFIER attributes:`,
+      allProductIdentifiers
+    );
 
-  // Compare Model Number with ALL MODEL_NUMBER attributes found
-  if (searchModelNumber && allModelNumbers.length > 0) {
-    const normalizedSearchModel = normalizeForComparison(searchModelNumber);
+    // Compare Model Number with ALL MODEL_NUMBER attributes found
+    if (searchModelNumber && allModelNumbers.length > 0) {
+      const normalizedSearchModel = normalizeForComparison(searchModelNumber);
 
-    for (let i = 0; i < allModelNumbers.length; i++) {
-      const modelData = allModelNumbers[i];
-      const extractedModelNumber = modelData.value;
-      
-      if (extractedModelNumber) {
-        let modelMatch = false;
-        let matchType = "exact";
+      for (let i = 0; i < allModelNumbers.length; i++) {
+        const modelData = allModelNumbers[i];
+        const extractedModelNumber = modelData.value;
 
-        if (extractedModelNumber.includes(',')) {
-          const modelValues = extractedModelNumber
-            .split(',')
-            .map(val => normalizeForComparison(val.trim()))
-            .filter(val => val.length > 0);
-          
-          modelMatch = modelValues.includes(normalizedSearchModel);
-          matchType = "inclusion";
-        } else {
-          const normalizedExtractedModel = normalizeForComparison(extractedModelNumber);
-          modelMatch = normalizedSearchModel === normalizedExtractedModel;
-        }
+        if (extractedModelNumber) {
+          let modelMatch = false;
+          let matchType = "exact";
 
-        console.log(`Model Number ${i + 1} Match: ${modelMatch ? "✅ YES" : "❌ NO"} (${matchType})`);
+          if (extractedModelNumber.includes(",")) {
+            const modelValues = extractedModelNumber
+              .split(",")
+              .map((val) => normalizeForComparison(val.trim()))
+              .filter((val) => val.length > 0);
 
-        if (modelMatch) {
-          matches.push({
-            fieldName: `MODEL_NUMBER_${i + 1}`,
-            fieldValue: extractedModelNumber,
-            confidence: modelData.confidence || "N/A",
-            matchType: matchType,
-            matchedKeyword: searchModelNumber,
-            attributeName: modelData.attribute,
-            displayName: `modelNumber ${searchModelNumber} matches with ${modelData.attribute}`
-          });
-          hasMatch = true;
-        }
-      }
-    }
-  }
+            modelMatch = modelValues.includes(normalizedSearchModel);
+            matchType = "inclusion";
+          } else {
+            const normalizedExtractedModel =
+              normalizeForComparison(extractedModelNumber);
+            modelMatch = normalizedSearchModel === normalizedExtractedModel;
+          }
 
-  // Compare Part Number with ALL MODEL_NUMBER attributes
-  if (searchPartNumber && allModelNumbers.length > 0) {
-    const normalizedSearchPart = normalizeForComparison(searchPartNumber);
-
-    for (let i = 0; i < allModelNumbers.length; i++) {
-      const modelData = allModelNumbers[i];
-      const extractedModelNumber = modelData.value;
-      
-      if (extractedModelNumber) {
-        let partMatch = false;
-        let matchType = "exact";
-
-        if (extractedModelNumber.includes(',')) {
-          const modelValues = extractedModelNumber
-            .split(',')
-            .map(val => normalizeForComparison(val.trim()))
-            .filter(val => val.length > 0);
-          
-          partMatch = modelValues.includes(normalizedSearchPart);
-          matchType = "inclusion";
-        } else {
-          const normalizedExtractedModel = normalizeForComparison(extractedModelNumber);
-          partMatch = normalizedSearchPart === normalizedExtractedModel;
-        }
-
-        if (partMatch) {
-          matches.push({
-            fieldName: `PART_NUMBER_vs_MODEL_${i + 1}`,
-            fieldValue: extractedModelNumber,
-            confidence: modelData.confidence || "N/A",
-            matchType: matchType,
-            matchedKeyword: searchPartNumber,
-            attributeName: modelData.attribute,
-            displayName: `partNumber ${searchPartNumber} matches with ${modelData.attribute}`
-          });
-          hasMatch = true;
-        }
-      }
-    }
-  }
-
-  // Compare Matching Part Number with ALL MODEL_NUMBER attributes
-  if (searchMatchingPartNumber && allModelNumbers.length > 0) {
-    const normalizedSearchMatchingPart = normalizeForComparison(searchMatchingPartNumber);
-
-    for (let i = 0; i < allModelNumbers.length; i++) {
-      const modelData = allModelNumbers[i];
-      const extractedModelNumber = modelData.value;
-      
-      if (extractedModelNumber) {
-        let matchingPartMatch = false;
-        let matchType = "exact";
-
-        if (extractedModelNumber.includes(',')) {
-          const modelValues = extractedModelNumber
-            .split(',')
-            .map(val => normalizeForComparison(val.trim()))
-            .filter(val => val.length > 0);
-          
-          matchingPartMatch = modelValues.includes(normalizedSearchMatchingPart);
-          matchType = "inclusion";
-        } else {
-          const normalizedExtractedModel = normalizeForComparison(extractedModelNumber);
-          matchingPartMatch = normalizedSearchMatchingPart === normalizedExtractedModel;
-        }
-
-        if (matchingPartMatch) {
-          matches.push({
-            fieldName: `MATCHING_PART_vs_MODEL_${i + 1}`,
-            fieldValue: extractedModelNumber,
-            confidence: modelData.confidence || "N/A",
-            matchType: matchType,
-            matchedKeyword: searchMatchingPartNumber,
-            attributeName: modelData.attribute,
-            displayName: `matchingPartNumber ${searchMatchingPartNumber} matches with ${modelData.attribute}`
-          });
-          hasMatch = true;
-        }
-      }
-    }
-  }
-
-  // Compare ASIN with ALL MODEL_NUMBER attributes
-  if (searchASIN && allModelNumbers.length > 0) {
-    const normalizedSearchASIN = normalizeForComparison(searchASIN);
-
-    for (let i = 0; i < allModelNumbers.length; i++) {
-      const modelData = allModelNumbers[i];
-      const extractedModelNumber = modelData.value;
-      
-      if (extractedModelNumber) {
-        let asinMatch = false;
-        let matchType = "exact";
-
-        if (extractedModelNumber.includes(',')) {
-          const modelValues = extractedModelNumber
-            .split(',')
-            .map(val => normalizeForComparison(val.trim()))
-            .filter(val => val.length > 0);
-          
-          asinMatch = modelValues.includes(normalizedSearchASIN);
-          matchType = "inclusion";
-        } else {
-          const normalizedExtractedModel = normalizeForComparison(extractedModelNumber);
-          asinMatch = normalizedSearchASIN === normalizedExtractedModel;
-        }
-
-        if (asinMatch) {
-          matches.push({
-            fieldName: `ASIN_vs_MODEL_${i + 1}`,
-            fieldValue: extractedModelNumber,
-            confidence: modelData.confidence || "N/A",
-            matchType: matchType,
-            matchedKeyword: searchASIN,
-            attributeName: modelData.attribute,
-            displayName: `ASIN ${searchASIN} matches with ${modelData.attribute}`
-          });
-          hasMatch = true;
-        }
-      }
-    }
-  }
-
-  // Compare Part Number with actual PART_NUMBER attribute
-  if (searchPartNumber) {
-    const normalizedSearchPart = normalizeForComparison(searchPartNumber);
-    const extractedPartNumber = extractedAttributes.PART_NUMBER?.value;
-
-    if (extractedPartNumber) {
-      const normalizedExtractedPart = normalizeForComparison(extractedPartNumber);
-      const partMatch = normalizedSearchPart === normalizedExtractedPart;
-
-      if (partMatch) {
-        matches.push({
-          fieldName: "PART_NUMBER",
-          fieldValue: extractedPartNumber,
-          confidence: extractedAttributes.PART_NUMBER?.confidence || "N/A",
-          matchType: "exact",
-          matchedKeyword: searchPartNumber,
-          displayName: `partNumber ${searchPartNumber} matches with PART_NUMBER`
-        });
-        hasMatch = true;
-      }
-    }
-  }
-
-  // Compare Matching Part Number with actual PART_NUMBER attribute
-  if (searchMatchingPartNumber) {
-    const normalizedSearchMatchingPart = normalizeForComparison(searchMatchingPartNumber);
-    const extractedPartNumber = extractedAttributes.PART_NUMBER?.value;
-
-    if (extractedPartNumber) {
-      const normalizedExtractedPart = normalizeForComparison(extractedPartNumber);
-      const matchingPartMatch = normalizedSearchMatchingPart === normalizedExtractedPart;
-
-      if (matchingPartMatch) {
-        matches.push({
-          fieldName: "MATCHING_PART_NUMBER",
-          fieldValue: extractedPartNumber,
-          confidence: extractedAttributes.PART_NUMBER?.confidence || "N/A",
-          matchType: "exact",
-          matchedKeyword: searchMatchingPartNumber,
-          displayName: `matchingPartNumber ${searchMatchingPartNumber} matches with PART_NUMBER`
-        });
-        hasMatch = true;
-      }
-    }
-  }
-
-  // ENHANCED: Compare ALL search parameters with ALL PRODUCT_IDENTIFIER attributes
-  if (allProductIdentifiers.length > 0) {
-    console.log(`Processing ${allProductIdentifiers.length} PRODUCT_IDENTIFIER attributes...`);
-
-    for (let i = 0; i < allProductIdentifiers.length; i++) {
-      const productData = allProductIdentifiers[i];
-      const extractedProductIdentifier = productData.value;
-      
-      if (extractedProductIdentifier) {
-        // Split by multiple delimiters (comma, period, space, underscore) and normalize each one
-        const productIdentifiers = extractedProductIdentifier
-          .split(/[,.\s_]+/)
-          .map(id => normalizeForComparison(id.trim()))
-          .filter(id => id.length > 0);
-
-        console.log(`Product Identifier ${i + 1}: "${extractedProductIdentifier}"`);
-        console.log(`Product Identifiers (parsed): [${productIdentifiers.join(', ')}]`);
-
-        // Compare Model Number with this PRODUCT_IDENTIFIER
-        if (searchModelNumber) {
-          const normalizedSearchModel = normalizeForComparison(searchModelNumber);
-          const modelMatch = productIdentifiers.includes(normalizedSearchModel);
+          console.log(
+            `Model Number ${i + 1} Match: ${
+              modelMatch ? "✅ YES" : "❌ NO"
+            } (${matchType})`
+          );
 
           if (modelMatch) {
             matches.push({
-              fieldName: `MODEL_vs_PRODUCT_IDENTIFIER_${i + 1}`,
-              fieldValue: extractedProductIdentifier,
-              confidence: productData.confidence || "N/A",
-              matchType: "inclusion",
+              fieldName: `MODEL_NUMBER_${i + 1}`,
+              fieldValue: extractedModelNumber,
+              confidence: modelData.confidence || "N/A",
+              matchType: matchType,
               matchedKeyword: searchModelNumber,
-              attributeName: productData.attribute,
-              displayName: `modelNumber ${searchModelNumber} matches with ${productData.attribute}`
-            });
-            hasMatch = true;
-          }
-        }
-
-        // Compare Part Number with this PRODUCT_IDENTIFIER
-        if (searchPartNumber) {
-          const normalizedSearchPart = normalizeForComparison(searchPartNumber);
-          const partMatch = productIdentifiers.includes(normalizedSearchPart);
-
-          if (partMatch) {
-            matches.push({
-              fieldName: `PART_vs_PRODUCT_IDENTIFIER_${i + 1}`,
-              fieldValue: extractedProductIdentifier,
-              confidence: productData.confidence || "N/A",
-              matchType: "inclusion",
-              matchedKeyword: searchPartNumber,
-              attributeName: productData.attribute,
-              displayName: `partNumber ${searchPartNumber} matches with ${productData.attribute}`
-            });
-            hasMatch = true;
-          }
-        }
-
-        // Compare Matching Part Number with this PRODUCT_IDENTIFIER
-        if (searchMatchingPartNumber) {
-          const normalizedSearchMatchingPart = normalizeForComparison(searchMatchingPartNumber);
-          const matchingPartMatch = productIdentifiers.includes(normalizedSearchMatchingPart);
-
-          if (matchingPartMatch) {
-            matches.push({
-              fieldName: `MATCHING_PART_vs_PRODUCT_IDENTIFIER_${i + 1}`,
-              fieldValue: extractedProductIdentifier,
-              confidence: productData.confidence || "N/A",
-              matchType: "inclusion",
-              matchedKeyword: searchMatchingPartNumber,
-              attributeName: productData.attribute,
-              displayName: `matchingPartNumber ${searchMatchingPartNumber} matches with ${productData.attribute}`
-            });
-            hasMatch = true;
-          }
-        }
-
-        // ENHANCED: Compare ASIN with this PRODUCT_IDENTIFIER
-        if (searchASIN) {
-          const normalizedSearchASIN = normalizeForComparison(searchASIN);
-          const asinMatch = productIdentifiers.includes(normalizedSearchASIN);
-
-          if (asinMatch) {
-            matches.push({
-              fieldName: `ASIN_vs_PRODUCT_IDENTIFIER_${i + 1}`,
-              fieldValue: extractedProductIdentifier,
-              confidence: productData.confidence || "N/A",
-              matchType: "inclusion",
-              matchedKeyword: searchASIN,
-              attributeName: productData.attribute,
-              displayName: `ASIN ${searchASIN} matches with ${productData.attribute}`
+              attributeName: modelData.attribute,
+              displayName: `modelNumber ${searchModelNumber} matches with ${modelData.attribute}`,
             });
             hasMatch = true;
           }
         }
       }
     }
+
+    // Compare Part Number with ALL MODEL_NUMBER attributes
+    if (searchPartNumber && allModelNumbers.length > 0) {
+      const normalizedSearchPart = normalizeForComparison(searchPartNumber);
+
+      for (let i = 0; i < allModelNumbers.length; i++) {
+        const modelData = allModelNumbers[i];
+        const extractedModelNumber = modelData.value;
+
+        if (extractedModelNumber) {
+          let partMatch = false;
+          let matchType = "exact";
+
+          if (extractedModelNumber.includes(",")) {
+            const modelValues = extractedModelNumber
+              .split(",")
+              .map((val) => normalizeForComparison(val.trim()))
+              .filter((val) => val.length > 0);
+
+            partMatch = modelValues.includes(normalizedSearchPart);
+            matchType = "inclusion";
+          } else {
+            const normalizedExtractedModel =
+              normalizeForComparison(extractedModelNumber);
+            partMatch = normalizedSearchPart === normalizedExtractedModel;
+          }
+
+          if (partMatch) {
+            matches.push({
+              fieldName: `PART_NUMBER_vs_MODEL_${i + 1}`,
+              fieldValue: extractedModelNumber,
+              confidence: modelData.confidence || "N/A",
+              matchType: matchType,
+              matchedKeyword: searchPartNumber,
+              attributeName: modelData.attribute,
+              displayName: `partNumber ${searchPartNumber} matches with ${modelData.attribute}`,
+            });
+            hasMatch = true;
+          }
+        }
+      }
+    }
+
+    // Compare Matching Part Number with ALL MODEL_NUMBER attributes
+    if (searchMatchingPartNumber && allModelNumbers.length > 0) {
+      const normalizedSearchMatchingPart = normalizeForComparison(
+        searchMatchingPartNumber
+      );
+
+      for (let i = 0; i < allModelNumbers.length; i++) {
+        const modelData = allModelNumbers[i];
+        const extractedModelNumber = modelData.value;
+
+        if (extractedModelNumber) {
+          let matchingPartMatch = false;
+          let matchType = "exact";
+
+          if (extractedModelNumber.includes(",")) {
+            const modelValues = extractedModelNumber
+              .split(",")
+              .map((val) => normalizeForComparison(val.trim()))
+              .filter((val) => val.length > 0);
+
+            matchingPartMatch = modelValues.includes(
+              normalizedSearchMatchingPart
+            );
+            matchType = "inclusion";
+          } else {
+            const normalizedExtractedModel =
+              normalizeForComparison(extractedModelNumber);
+            matchingPartMatch =
+              normalizedSearchMatchingPart === normalizedExtractedModel;
+          }
+
+          if (matchingPartMatch) {
+            matches.push({
+              fieldName: `MATCHING_PART_vs_MODEL_${i + 1}`,
+              fieldValue: extractedModelNumber,
+              confidence: modelData.confidence || "N/A",
+              matchType: matchType,
+              matchedKeyword: searchMatchingPartNumber,
+              attributeName: modelData.attribute,
+              displayName: `matchingPartNumber ${searchMatchingPartNumber} matches with ${modelData.attribute}`,
+            });
+            hasMatch = true;
+          }
+        }
+      }
+    }
+
+    // Compare ASIN with ALL MODEL_NUMBER attributes
+    if (searchASIN && allModelNumbers.length > 0) {
+      const normalizedSearchASIN = normalizeForComparison(searchASIN);
+
+      for (let i = 0; i < allModelNumbers.length; i++) {
+        const modelData = allModelNumbers[i];
+        const extractedModelNumber = modelData.value;
+
+        if (extractedModelNumber) {
+          let asinMatch = false;
+          let matchType = "exact";
+
+          if (extractedModelNumber.includes(",")) {
+            const modelValues = extractedModelNumber
+              .split(",")
+              .map((val) => normalizeForComparison(val.trim()))
+              .filter((val) => val.length > 0);
+
+            asinMatch = modelValues.includes(normalizedSearchASIN);
+            matchType = "inclusion";
+          } else {
+            const normalizedExtractedModel =
+              normalizeForComparison(extractedModelNumber);
+            asinMatch = normalizedSearchASIN === normalizedExtractedModel;
+          }
+
+          if (asinMatch) {
+            matches.push({
+              fieldName: `ASIN_vs_MODEL_${i + 1}`,
+              fieldValue: extractedModelNumber,
+              confidence: modelData.confidence || "N/A",
+              matchType: matchType,
+              matchedKeyword: searchASIN,
+              attributeName: modelData.attribute,
+              displayName: `ASIN ${searchASIN} matches with ${modelData.attribute}`,
+            });
+            hasMatch = true;
+          }
+        }
+      }
+    }
+
+    // Compare Part Number with actual PART_NUMBER attribute
+    if (searchPartNumber) {
+      const normalizedSearchPart = normalizeForComparison(searchPartNumber);
+      const extractedPartNumber = extractedAttributes.PART_NUMBER?.value;
+
+      if (extractedPartNumber) {
+        const normalizedExtractedPart =
+          normalizeForComparison(extractedPartNumber);
+        const partMatch = normalizedSearchPart === normalizedExtractedPart;
+
+        if (partMatch) {
+          matches.push({
+            fieldName: "PART_NUMBER",
+            fieldValue: extractedPartNumber,
+            confidence: extractedAttributes.PART_NUMBER?.confidence || "N/A",
+            matchType: "exact",
+            matchedKeyword: searchPartNumber,
+            displayName: `partNumber ${searchPartNumber} matches with PART_NUMBER`,
+          });
+          hasMatch = true;
+        }
+      }
+    }
+
+    // Compare Matching Part Number with actual PART_NUMBER attribute
+    if (searchMatchingPartNumber) {
+      const normalizedSearchMatchingPart = normalizeForComparison(
+        searchMatchingPartNumber
+      );
+      const extractedPartNumber = extractedAttributes.PART_NUMBER?.value;
+
+      if (extractedPartNumber) {
+        const normalizedExtractedPart =
+          normalizeForComparison(extractedPartNumber);
+        const matchingPartMatch =
+          normalizedSearchMatchingPart === normalizedExtractedPart;
+
+        if (matchingPartMatch) {
+          matches.push({
+            fieldName: "MATCHING_PART_NUMBER",
+            fieldValue: extractedPartNumber,
+            confidence: extractedAttributes.PART_NUMBER?.confidence || "N/A",
+            matchType: "exact",
+            matchedKeyword: searchMatchingPartNumber,
+            displayName: `matchingPartNumber ${searchMatchingPartNumber} matches with PART_NUMBER`,
+          });
+          hasMatch = true;
+        }
+      }
+    }
+
+    // ENHANCED: Compare ALL search parameters with ALL PRODUCT_IDENTIFIER attributes
+    if (allProductIdentifiers.length > 0) {
+      console.log(
+        `Processing ${allProductIdentifiers.length} PRODUCT_IDENTIFIER attributes...`
+      );
+
+      for (let i = 0; i < allProductIdentifiers.length; i++) {
+        const productData = allProductIdentifiers[i];
+        const extractedProductIdentifier = productData.value;
+
+        if (extractedProductIdentifier) {
+          // Split by multiple delimiters (comma, period, space, underscore) and normalize each one
+          const productIdentifiers = extractedProductIdentifier
+            .split(/[,.\s_]+/)
+            .map((id) => normalizeForComparison(id.trim()))
+            .filter((id) => id.length > 0);
+
+          console.log(
+            `Product Identifier ${i + 1}: "${extractedProductIdentifier}"`
+          );
+          console.log(
+            `Product Identifiers (parsed): [${productIdentifiers.join(", ")}]`
+          );
+
+          // Compare Model Number with this PRODUCT_IDENTIFIER
+          if (searchModelNumber) {
+            const normalizedSearchModel =
+              normalizeForComparison(searchModelNumber);
+            const modelMatch = productIdentifiers.includes(
+              normalizedSearchModel
+            );
+
+            if (modelMatch) {
+              matches.push({
+                fieldName: `MODEL_vs_PRODUCT_IDENTIFIER_${i + 1}`,
+                fieldValue: extractedProductIdentifier,
+                confidence: productData.confidence || "N/A",
+                matchType: "inclusion",
+                matchedKeyword: searchModelNumber,
+                attributeName: productData.attribute,
+                displayName: `modelNumber ${searchModelNumber} matches with ${productData.attribute}`,
+              });
+              hasMatch = true;
+            }
+          }
+
+          // Compare Part Number with this PRODUCT_IDENTIFIER
+          if (searchPartNumber) {
+            const normalizedSearchPart =
+              normalizeForComparison(searchPartNumber);
+            const partMatch = productIdentifiers.includes(normalizedSearchPart);
+
+            if (partMatch) {
+              matches.push({
+                fieldName: `PART_vs_PRODUCT_IDENTIFIER_${i + 1}`,
+                fieldValue: extractedProductIdentifier,
+                confidence: productData.confidence || "N/A",
+                matchType: "inclusion",
+                matchedKeyword: searchPartNumber,
+                attributeName: productData.attribute,
+                displayName: `partNumber ${searchPartNumber} matches with ${productData.attribute}`,
+              });
+              hasMatch = true;
+            }
+          }
+
+          // Compare Matching Part Number with this PRODUCT_IDENTIFIER
+          if (searchMatchingPartNumber) {
+            const normalizedSearchMatchingPart = normalizeForComparison(
+              searchMatchingPartNumber
+            );
+            const matchingPartMatch = productIdentifiers.includes(
+              normalizedSearchMatchingPart
+            );
+
+            if (matchingPartMatch) {
+              matches.push({
+                fieldName: `MATCHING_PART_vs_PRODUCT_IDENTIFIER_${i + 1}`,
+                fieldValue: extractedProductIdentifier,
+                confidence: productData.confidence || "N/A",
+                matchType: "inclusion",
+                matchedKeyword: searchMatchingPartNumber,
+                attributeName: productData.attribute,
+                displayName: `matchingPartNumber ${searchMatchingPartNumber} matches with ${productData.attribute}`,
+              });
+              hasMatch = true;
+            }
+          }
+
+          // ENHANCED: Compare ASIN with this PRODUCT_IDENTIFIER
+          if (searchASIN) {
+            const normalizedSearchASIN = normalizeForComparison(searchASIN);
+            const asinMatch = productIdentifiers.includes(normalizedSearchASIN);
+
+            if (asinMatch) {
+              matches.push({
+                fieldName: `ASIN_vs_PRODUCT_IDENTIFIER_${i + 1}`,
+                fieldValue: extractedProductIdentifier,
+                confidence: productData.confidence || "N/A",
+                matchType: "inclusion",
+                matchedKeyword: searchASIN,
+                attributeName: productData.attribute,
+                displayName: `ASIN ${searchASIN} matches with ${productData.attribute}`,
+              });
+              hasMatch = true;
+            }
+          }
+        }
+      }
+    }
+
+    console.log(
+      `\n🎯 OVERALL MATCH RESULT: ${
+        hasMatch ? "✅ MATCH FOUND" : "❌ NO MATCH"
+      }`
+    );
+
+    return {
+      hasMatch,
+      matches,
+      details,
+    };
   }
-
-  console.log(`\n🎯 OVERALL MATCH RESULT: ${hasMatch ? "✅ MATCH FOUND" : "❌ NO MATCH"}`);
-
-  return {
-    hasMatch,
-    matches,
-    details,
-  };
-}
 
   // NEW: Method to get all MODEL_NUMBER attributes from the field data
   getAllModelNumbers() {
     const modelNumbers = [];
-    
+
     for (const [fieldName, fieldData] of this.fieldData) {
       const lowerFieldName = fieldName.toLowerCase();
-      
+
       // Check if this field is a MODEL_NUMBER variant
-      if (lowerFieldName.includes('model_number') || 
-          lowerFieldName.includes('asin_model_number') ||
-          lowerFieldName === 'model number' ||
-          lowerFieldName === 'asin model number') {
-        
+      if (
+        lowerFieldName.includes("model_number") ||
+        lowerFieldName.includes("asin_model_number") ||
+        lowerFieldName === "model number" ||
+        lowerFieldName === "asin model number"
+      ) {
         modelNumbers.push({
           attribute: fieldData.attribute,
           value: fieldData.value,
           confidence: fieldData.confidence,
-          originalFieldName: fieldName
+          originalFieldName: fieldName,
         });
       }
     }
-    
+
     return modelNumbers;
   }
 
@@ -717,7 +760,7 @@ class DynamicFieldTableScanner {
                   // ENHANCED: Store with unique keys to handle multiple MODEL_NUMBER attributes
                   let key = attribute;
                   let counter = 1;
-                  
+
                   // If this attribute already exists, create a unique key
                   while (this.fieldData.has(key)) {
                     counter++;
@@ -729,7 +772,7 @@ class DynamicFieldTableScanner {
                     confidence: confidence,
                     attribute: attribute,
                     originalAttribute: attribute,
-                    uniqueKey: key
+                    uniqueKey: key,
                   });
 
                   foundAny = true;
@@ -789,23 +832,24 @@ class DynamicFieldTableScanner {
   }
 
   getAllProductIdentifiers() {
-  const productIdentifiers = [];
-  
+    const productIdentifiers = [];
+
     for (const [fieldName, fieldData] of this.fieldData) {
       const lowerFieldName = fieldName.toLowerCase();
-      
-      if (lowerFieldName.includes('product_identifier') || 
-          lowerFieldName === 'product identifier') {
-        
+
+      if (
+        lowerFieldName.includes("product_identifier") ||
+        lowerFieldName === "product identifier"
+      ) {
         productIdentifiers.push({
           attribute: fieldData.attribute,
           value: fieldData.value,
           confidence: fieldData.confidence,
-          originalFieldName: fieldName
+          originalFieldName: fieldName,
         });
       }
     }
-    
+
     return productIdentifiers;
   }
 
@@ -981,32 +1025,43 @@ class DocumentTypeUIManager {
     return this.uiContainer;
   }
 
-  addDocumentTypeCard(docType, trNumber, status, matches = [], additionalInfo = {}) {
-  if (!this.uiContainer) {
-    this.createDocumentTypeUI();
-  }
+  addDocumentTypeCard(
+    docType,
+    trNumber,
+    status,
+    matches = [],
+    additionalInfo = {}
+  ) {
+    if (!this.uiContainer) {
+      this.createDocumentTypeUI();
+    }
 
-  const grid = document.getElementById("flash-doctype-grid");
-  if (!grid) return;
+    const grid = document.getElementById("flash-doctype-grid");
+    if (!grid) return;
 
-  // Generate unique ID for this card
-  const cardId = `doctype-${docType}-${Date.now()}`;
+    // Generate unique ID for this card
+    const cardId = `doctype-${docType}-${Date.now()}`;
 
-  const card = document.createElement("div");
-  card.className = `flash-doctype-card ${
-    status === "MATCH" ? "match" : "no-match"
-  }`;
-  card.id = cardId;
+    const card = document.createElement("div");
+    card.className = `flash-doctype-card ${
+      status === "MATCH" ? "match" : "no-match"
+    }`;
+    card.id = cardId;
 
-  // Build matches HTML
-  let matchesHTML = "";
-  if (matches && matches.length > 0) {
-    matchesHTML = matches.map(match => 
-      `<div class="flash-match-item">${match.displayName || `${match.fieldName}: ${match.fieldValue}`}</div>`
-    ).join("");
-  }
+    // Build matches HTML
+    let matchesHTML = "";
+    if (matches && matches.length > 0) {
+      matchesHTML = matches
+        .map(
+          (match) =>
+            `<div class="flash-match-item">${
+              match.displayName || `${match.fieldName}: ${match.fieldValue}`
+            }</div>`
+        )
+        .join("");
+    }
 
-  card.innerHTML = `
+    card.innerHTML = `
     <div class="flash-doctype-title">
       <span>${docType || "Unknown Document"}</span>
       <span class="flash-status-badge ${
@@ -1018,36 +1073,44 @@ class DocumentTypeUIManager {
         <span class="flash-detail-label">TR Number:</span>
         <span class="flash-detail-value">${trNumber || "N/A"}</span>
       </div>
-      ${matchesHTML ? `
+      ${
+        matchesHTML
+          ? `
       <div class="flash-detail-row">
         <span class="flash-detail-label">Matching Attributes:</span>
         <div class="flash-detail-value">
           ${matchesHTML}
         </div>
       </div>
-      ` : ""}
-      ${additionalInfo.artifactName ? `
+      `
+          : ""
+      }
+      ${
+        additionalInfo.artifactName
+          ? `
       <div class="flash-detail-row">
         <span class="flash-detail-label">Artifact:</span>
         <span class="flash-detail-value">${additionalInfo.artifactName}</span>
       </div>
-      ` : ""}
+      `
+          : ""
+      }
     </div>
   `;
 
-  grid.appendChild(card);
+    grid.appendChild(card);
 
-  // Store document type info
-  this.documentTypes.set(cardId, {
-    docType,
-    trNumber,
-    status,
-    matches,
-    additionalInfo,
-  });
+    // Store document type info
+    this.documentTypes.set(cardId, {
+      docType,
+      trNumber,
+      status,
+      matches,
+      additionalInfo,
+    });
 
-  return cardId;
-}
+    return cardId;
+  }
 
   clearResults() {
     const grid = document.getElementById("flash-doctype-grid");
@@ -1064,7 +1127,6 @@ class DocumentTypeUIManager {
     }
     this.documentTypes.clear();
   }
-  
 }
 
 // Enhanced Document Catalog with dynamic field table integration
@@ -1580,31 +1642,31 @@ class DocumentProcessor {
   }
 
   createDocumentCard(document, result) {
-  const extracted = result.extractedAttributes || {};
+    const extracted = result.extractedAttributes || {};
 
-  // Get DOC_TYPE and TR_NUMBER
-  const docType = extracted.DOC_TYPE?.value || "Unknown Document";
-  const trNumber = extracted.TR_NUMBER?.value || "N/A";
-  const status = result.found ? "MATCH" : "NO MATCH";
+    // Get DOC_TYPE and TR_NUMBER
+    const docType = extracted.DOC_TYPE?.value || "Unknown Document";
+    const trNumber = extracted.TR_NUMBER?.value || "N/A";
+    const status = result.found ? "MATCH" : "NO MATCH";
 
-  // Prepare additional info
-  const additionalInfo = {
-    artifactName: document.artifactName,
-    confidence: extracted.DOC_TYPE?.confidence || "N/A",
-  };
+    // Prepare additional info
+    const additionalInfo = {
+      artifactName: document.artifactName,
+      confidence: extracted.DOC_TYPE?.confidence || "N/A",
+    };
 
-  // Get the matches with their display names
-  const matches = result.matches || [];
+    // Get the matches with their display names
+    const matches = result.matches || [];
 
-  // Create the UI card with matches instead of individual details
-  this.docTypeUIManager.addDocumentTypeCard(
-    docType,
-    trNumber,
-    status,
-    matches,  // Pass matches array instead of additionalInfo
-    additionalInfo
-  );
-}
+    // Create the UI card with matches instead of individual details
+    this.docTypeUIManager.addDocumentTypeCard(
+      docType,
+      trNumber,
+      status,
+      matches, // Pass matches array instead of additionalInfo
+      additionalInfo
+    );
+  }
 
   async processDocument(document) {
     try {
@@ -1969,13 +2031,14 @@ async function initialize() {
     if (ui.documentsButton) {
       ui.documentsButton.addEventListener("click", async () => {
         // Step 1: Click the required tab
-        clickItems("RequiredTab");
+        clickItems("ASIN details");
 
         // Step 2: Wait for tab content to load
         await new Promise((resolve) => setTimeout(resolve, 2000));
 
         // Step 3: Fetch the model number, part number, matching part number, and ASIN
         const modelNumber = getValueByLabel("Model Number");
+        console.log("MODEL NUMBER FETCHEEEDDDDDDDDDDDDDDDDDDDDDDDDD");
         const partNumber = getValueByLabel("Part Number");
         const matchingPartNumber = getValueByLabel("Matching Part Number"); // ADDED
         const asin = getASIN(); // ADDED
